@@ -17,6 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("--static", action='store_true', help="Add this flag to solve the static variant of the problem (by default dynamic)")
     parser.add_argument("--epoch_tlim", type=int, default=120, help="Time limit per epoch")
     parser.add_argument("--timeout", type=int, default=3600, help="Global timeout (seconds) to use")
+    parser.add_argument("--solo", action='store_true')
 
     try:
         split_idx = sys.argv.index("--")
@@ -28,7 +29,8 @@ if __name__ == "__main__":
     solver_cmd = sys.argv[split_idx+1:]
 
     # Load instance
-    static_instance = tools.read_vrplib(args.instance)
+    if args.solo: static_instance = tools.read_solomon(args.instance)
+    else: static_instance = tools.read_vrplib(args.instance)
 
     # Create environment
     env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim, args.static)

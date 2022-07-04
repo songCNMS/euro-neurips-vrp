@@ -1,6 +1,8 @@
 import json
 import os
 import numpy as np
+from cvrptw import read_input_cvrptw
+
 
 # https://stackoverflow.com/questions/26646362/numpy-array-is-not-json-serializable
 class NumpyJSONEncoder(json.JSONEncoder):
@@ -234,6 +236,30 @@ def read_vrplib(filename, rounded=True):
         'service_times': np.array(service_t),
         'duration_matrix': np.array(duration_matrix) if len(duration_matrix) > 0 else None
     }
+    
+
+def read_solomon(filename):
+    (nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
+            earliest_start, latest_end, max_horizon, warehouse_x, warehouse_y, customers_x, customers_y) = read_input_cvrptw(filename)
+    
+    duration_matrix = np.zeros((1+nb_customers, 1+nb_customers))
+    for i in range(1+nb_customers):
+        for j in range(1+nb_customers):
+            if i == 0 and j == 0: pass
+            elif i == 0 and j > 0: duration_matrix[i, j] = distance_warehouses[j-1]
+            elif i > 0 and j == 0: duration_matrix[i, j] = distance_warehouses[i-1]
+            else: duration_matrix[i, j] = distance_matrix[i-1][j-1]
+    
+    return {
+        'is_depot': np.array([1] + [0] * nb_customers, dtype=bool),
+        'coords': np.array([(warehouse_x, warehouse_y)] + [(x,y) for x,y in zip(customers_x, customers_y)]),
+        'demands': np.array([0] + demands),
+        'capacity': truck_capacity,
+        'time_windows': np.array([[0, max_horizon]] + [[l, u] for l,u in zip(earliest_start, latest_end)]),
+        'service_times': np.array([0] + service_time),
+        'duration_matrix': duration_matrix
+    }
+    
 
 def write_vrplib(filename, instance, name="problem", euclidean=False, is_vrptw=True):
     # LKH/VRP does not take floats (HGS seems to do)
