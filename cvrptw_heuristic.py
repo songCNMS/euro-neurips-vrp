@@ -10,6 +10,7 @@ import pickle
 from cvrptw import read_input_cvrptw
 from tsp import get_tsp_solution
 from cvrptw_single_route import path_selection, cvrptw_one_vehicle, add_path
+import tools
 
 
 depot = "Customer_0"
@@ -337,11 +338,31 @@ def one_round_heuristics(exp_round, round_res_dict, nb_customers, truck_capacity
 
 import time
 
-def main(problem_file, round_res_dict, m_process):
+def main(problem_file, round_res_dict, m_process, solo=True):
     # dir_name = os.path.dirname(problem_file)
     # file_name = os.path.splitext(os.path.basename(problem_file))[0]
-    (nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
+    if solo:
+        (nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
                 earliest_start, latest_end, max_horizon, warehouse_x, warehouse_y, customers_x, customers_y) = read_input_cvrptw(problem_file)
+    else:
+        problem = tools.read_vrplib(problem_file)
+        nb_customers = len(problem['is_depot']) - 1
+        truck_capacity = problem['capacity']
+        _time_windows = problem['time_windows']
+        _duration_matrix = problem['duration_matrix']
+        _service_times = problem['service_times']
+        _demands = problem['demands']
+        distance_matrix = np.zeros((nb_customers, nb_customers))
+        distance_warehouses = np.zeros(nb_customers)
+        earliest_start, latest_end, service_time, demands, max_horizon = [], [], [], [], _time_windows[0][1]
+        for i in range(nb_customers):
+            distance_warehouses[i] = _duration_matrix[0][i+1]
+            earliest_start.append(_time_windows[i+1][0])
+            latest_end.append(_time_windows[i+1][1])
+            service_time.append(_service_times[i+1])
+            demands.append(_demands[i+1])
+            for j in range(nb_customers):
+                distance_matrix[i][j] = _duration_matrix[i+1][j+1]
     
     if m_process:
         num_rounds = max(64, mp.cpu_count())
@@ -378,14 +399,15 @@ parser.add_argument("--opt", action="store_true")
 parser.add_argument("--batch", action="store_true")
 parser.add_argument("--mp", action="store_true")
 parser.add_argument("--remote", action="store_true")
+parser.add_argument("--solo", action="store_true")
 args = parser.parse_args()
 
 if args.remote: 
     data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks")
     output_dir = os.environ['AMLT_OUTPUT_DIR']
 else:
-    data_dir = "/data/songlei/cvrptw/"
-    output_dir = "/data/songlei/cvrptw/"
+    data_dir = "./"
+    output_dir = "./"
 
 if __name__ == '__main__':
     sota_res = pd.read_csv("sota_res.csv")
@@ -398,12 +420,13 @@ if __name__ == '__main__':
         problem_list = os.listdir(dir_name)
         res_file_name = f"{output_dir}/res_{args.num_nodes}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
         for problem in problem_list:
-            problem_file = os.path.join(dir_name, problem)
+            if args.solo: problem_file = os.path.join(dir_name, problem)
+            else: problem_file = args.problem
             if str.lower(os.path.splitext(os.path.basename(problem_file))[1]) != '.txt': continue
             if "path" in problem: continue
             print(problem_file)
             problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
-            total_path_num, total_cost = main(problem_file, round_res_dict, args.mp)
+            total_path_num, total_cost = main(problem_file, round_res_dict, args.mp, args.solo)
             sota = sota_res_dict.get(problem_name, (1, 1))
             result_list.append([problem, total_path_num, total_cost, sota[1], sota[0]])
             res_df = pd.DataFrame(data=result_list, columns=['problem', 'vehicles', 'total_cost', 'sota_vehicles', 'sota_cost'])
@@ -411,9 +434,10 @@ if __name__ == '__main__':
             res_df.to_csv(res_file_name, index=False)
         print(res_df.head())
     else:
-        problem_file = f"{data_dir}/cvrp_benchmarks/homberger_{args.num_nodes}_customer_instances/{args.problem}"
+        if args.solo: problem_file = f"{data_dir}/cvrp_benchmarks/homberger_{args.num_nodes}_customer_instances/{args.problem}"
+        else: problem_file = args.problem
         dir_name = os.path.dirname(problem_file)
         problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         sota = sota_res_dict.get(problem_name, (1, 1))
-        total_path_num, total_cost = main(problem_file, round_res_dict, args.mp)
+        total_path_num, total_cost = main(problem_file, round_res_dict, args.mp, args.solo)
         print(args.problem, (total_path_num, sota[1]), (total_cost, sota[0]), (total_cost-sota[0])/sota[0])
