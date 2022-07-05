@@ -1,0 +1,35 @@
+description: VRPTW
+
+target:
+  service: amlk8s
+  name: itpwus2cpucl1
+  vc: gcrcpu
+  # run "amlt target list amlk8s" to list the names of available AMLK8s targets
+  # name: msrresrchvc
+  # vc: gcr-singularity-resrch
+
+environment:
+  image: lesongdocker:vrp
+  registry: resrchvc4cr.azurecr.io # any public registry can be specified here
+  username: resrchvc4cr
+  setup:
+    - apt install libffi-dev
+    - pip install pulp
+    - pip install elkai
+    - cd baselines/hgs_vrptw; make all; cd ../..
+
+code:
+  # local directory of the code. this will be uploaded to the server.
+  # $CONFIG_DIR is expanded to the directory of this config file
+  local_dir: $CONFIG_DIR/
+
+data:
+  local_dir: cvrp_benchmarks/
+  remote_dir: cvrp_benchmarks/
+
+# list of jobs to run, we run 2 jobs in this example
+jobs:
+- name: vrp_ortec
+  sku: C32
+  command:
+  - python controller_batch.py --instance ortec --static --epoch_tlim 500 --  python solver.py --verbose
