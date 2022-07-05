@@ -236,7 +236,7 @@ def generate_init_solution(nb_customers, truck_capacity,
                            distance_warehouses, distance_matrix,
                            paths_dict, paths_cost_dict, paths_customers_dict):
     
-    min_path_frag_len, max_path_frag_len = 8, 50
+    min_path_frag_len, max_path_frag_len = 10, 50
     print("solving a non-constraint tsp problem")
     tsp_solution = get_tsp_solution(nb_customers, distance_warehouses, distance_matrix)
     all_customers, demands_dict, \
@@ -393,20 +393,19 @@ import matplotlib.pyplot as plt
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--problem", type=str)
-parser.add_argument("--num_nodes", type=int)
+parser.add_argument("--instance", type=str)
 parser.add_argument("--retrain", action="store_true")
 parser.add_argument("--opt", action="store_true")
 parser.add_argument("--batch", action="store_true")
 parser.add_argument("--mp", action="store_true")
 parser.add_argument("--remote", action="store_true")
-parser.add_argument("--solo", action="store_true")
 args = parser.parse_args()
 
 if args.remote: 
-    data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks")
+    data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
     output_dir = os.environ['AMLT_OUTPUT_DIR']
 else:
-    data_dir = "./"
+    data_dir = "cvrp_benchmarks/"
     output_dir = "./"
 
 if __name__ == '__main__':
@@ -414,19 +413,19 @@ if __name__ == '__main__':
     sota_res_dict = {row["problem"]: (row["distance"], row["vehicle"]) for _, row in sota_res.iterrows()}
     manager = mp.Manager()
     round_res_dict = manager.dict()
+    is_solo = (args.instance != "ortec")
     if args.batch:
         result_list = []
-        dir_name = os.path.dirname(f"{data_dir}/cvrp_benchmarks/homberger_{args.num_nodes}_customer_instances/")
+        dir_name = os.path.dirname(f"{data_dir}/cvrp_benchmarks/homberger_{args.instance}_customer_instances/")
         problem_list = os.listdir(dir_name)
-        res_file_name = f"{output_dir}/res_{args.num_nodes}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+        res_file_name = f"{output_dir}/res_{args.instance}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
         for problem in problem_list:
-            if args.solo: problem_file = os.path.join(dir_name, problem)
-            else: problem_file = args.problem
+            problem_file = os.path.join(dir_name, problem)
             if str.lower(os.path.splitext(os.path.basename(problem_file))[1]) != '.txt': continue
             if "path" in problem: continue
             print(problem_file)
             problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
-            total_path_num, total_cost = main(problem_file, round_res_dict, args.mp, args.solo)
+            total_path_num, total_cost = main(problem_file, round_res_dict, args.mp, is_solo)
             sota = sota_res_dict.get(problem_name, (1, 1))
             result_list.append([problem, total_path_num, total_cost, sota[1], sota[0]])
             res_df = pd.DataFrame(data=result_list, columns=['problem', 'vehicles', 'total_cost', 'sota_vehicles', 'sota_cost'])
@@ -434,10 +433,9 @@ if __name__ == '__main__':
             res_df.to_csv(res_file_name, index=False)
         print(res_df.head())
     else:
-        if args.solo: problem_file = f"{data_dir}/cvrp_benchmarks/homberger_{args.num_nodes}_customer_instances/{args.problem}"
-        else: problem_file = args.problem
+        problem_file = f"{data_dir}/cvrp_benchmarks/homberger_{args.instance}_customer_instances/{args.problem}"
         dir_name = os.path.dirname(problem_file)
         problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         sota = sota_res_dict.get(problem_name, (1, 1))
-        total_path_num, total_cost = main(problem_file, round_res_dict, args.mp, args.solo)
+        total_path_num, total_cost = main(problem_file, round_res_dict, args.mp, is_solo)
         print(args.problem, (total_path_num, sota[1]), (total_cost, sota[0]), (total_cost-sota[0])/sota[0])
