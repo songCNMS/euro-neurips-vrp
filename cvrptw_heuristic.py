@@ -405,7 +405,7 @@ if args.remote:
     data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
     output_dir = os.environ['AMLT_OUTPUT_DIR']
 else:
-    data_dir = "cvrp_benchmarks/"
+    data_dir = "./"
     output_dir = "./"
 
 if __name__ == '__main__':

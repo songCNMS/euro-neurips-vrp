@@ -13,11 +13,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--instance", help="Instance to solve")
+    parser.add_argument("--problem", help="problem to solve")
     parser.add_argument("--instance_seed", type=int, default=1, help="Seed to use for the dynamic instance")
     parser.add_argument("--static", action='store_true', help="Add this flag to solve the static variant of the problem (by default dynamic)")
     parser.add_argument("--epoch_tlim", type=int, default=120, help="Time limit per epoch")
     parser.add_argument("--timeout", type=int, default=3600, help="Global timeout (seconds) to use")
-    parser.add_argument("--solo", action='store_true')
 
     try:
         split_idx = sys.argv.index("--")
@@ -26,11 +26,15 @@ if __name__ == "__main__":
         sys.exit()
 
     args = parser.parse_args(sys.argv[1:split_idx])
+    
+    is_solo = (args.instance != 'ortec')
+    
     solver_cmd = sys.argv[split_idx+1:]
 
     # Load instance
-    if args.solo: static_instance = tools.read_solomon(args.instance)
-    else: static_instance = tools.read_vrplib(args.instance)
+    problem_file = f"cvrp_benchmarks/homberger_{args.instance}_customer_instances/{args.problem}"
+    if is_solo: static_instance = tools.read_solomon(problem_file)
+    else: static_instance = tools.read_vrplib(problem_file)
 
     # Create environment
     env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim, args.static)
