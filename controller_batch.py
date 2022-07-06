@@ -18,7 +18,7 @@ if __name__ == "__main__":
     parser.add_argument("--instance", help="Instance to solve")
     parser.add_argument("--instance_seed", type=int, default=1, help="Seed to use for the dynamic instance")
     parser.add_argument("--static", action='store_true', help="Add this flag to solve the static variant of the problem (by default dynamic)")
-    parser.add_argument("--epoch_tlim", type=int, default=120, help="Time limit per epoch")
+    parser.add_argument("--epoch_tlim", type=int, default=600, help="Time limit per epoch")
     parser.add_argument("--timeout", type=int, default=3600, help="Global timeout (seconds) to use")
     parser.add_argument("--remote", action="store_true")
     
@@ -40,9 +40,10 @@ if __name__ == "__main__":
     solver_cmd = sys.argv[split_idx+1:]
     
     dir_name = os.path.dirname(f"{data_dir}/cvrp_benchmarks/homberger_{args.instance}_customer_instances/")
-    problem_list = os.listdir(dir_name)
-    res_file_name = f"{output_dir}/res_{args.instance}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-    
+    problem_list = sorted(os.listdir(dir_name))
+    res_file_name = f"{output_dir}/ges_res_{args.instance}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    sota_res = pd.read_csv("sota_res.csv")
+    sota_res_dict = {row["problem"]: (row["distance"], row["vehicle"]) for _, row in sota_res.iterrows()}
     result_list = []
     for problem in problem_list:
         problem_file = os.path.join(dir_name, problem)
@@ -104,7 +105,10 @@ if __name__ == "__main__":
         print(f"Cost of solution: {sum(env.final_costs.values())}")
         print("Solution:")
         print(tools.json_dumps_np(env.final_solutions))
-        result_list.append([problem, len(env.final_costs.values()), sum(env.final_costs.values())])
-        res_df = pd.DataFrame(data=result_list, columns=['problem', 'vehicles', 'total_cost'])
+        problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
+        sota = sota_res_dict.get(problem_name, (1, 1))
+        result_list.append([problem, len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values()), sota[1], sota[0]])
+        res_df = pd.DataFrame(data=result_list, columns=['problem', 'vehicles', 'total_cost', 'sota_vehicles', 'sota_cost'])
+        res_df.loc[:, "gap"] = (res_df["total_cost"] - res_df["sota_cost"])/res_df["sota_cost"]
         res_df.to_csv(res_file_name, index=False)
     print(res_df.head())

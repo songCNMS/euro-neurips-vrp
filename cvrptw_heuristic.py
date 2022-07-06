@@ -424,8 +424,8 @@ if __name__ == '__main__':
     if args.batch:
         result_list = []
         dir_name = os.path.dirname(f"{data_dir}/cvrp_benchmarks/homberger_{args.instance}_customer_instances/")
-        problem_list = os.listdir(dir_name)
-        res_file_name = f"{output_dir}/res_{args.instance}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+        problem_list = sorted(os.listdir(dir_name))
+        res_file_name = f"{output_dir}/heuristic_res_{args.instance}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
         for problem in problem_list:
             problem_file = os.path.join(dir_name, problem)
             if str.lower(os.path.splitext(os.path.basename(problem_file))[1]) != '.txt': continue
