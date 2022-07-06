@@ -17,8 +17,8 @@ from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_i
 
 depot = "Customer_0"
 
-def construct_solution_from_ge_solver(instance, seed=1):
-    solutions = list(solve_static_vrptw(instance, time_limit=120, seed=seed))
+def construct_solution_from_ge_solver(instance, seed=1, tmp_dir='tmp'):
+    solutions = list(solve_static_vrptw(instance, time_limit=120, seed=seed, tmp_dir=tmp_dir))
     assert len(solutions) >= 1, "failed to init"
     return solutions[-1]
 
@@ -38,7 +38,7 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
                                                         earliest_start, latest_end, max_horizon,
                                                         distance_warehouses, distance_matrix)
     else:
-        init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round)
+        init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
         cur_routes = {}
         for i, route in enumerate(init_routes):
             path_name = f"PATH{i}"
