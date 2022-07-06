@@ -12,7 +12,7 @@ from tsp import get_tsp_solution
 from cvrptw_single_route import path_selection, cvrptw_one_vehicle, add_path
 import tools
 from solver import solve_static_vrptw
-from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution
+from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check
 
 
 depot = "Customer_0"
@@ -56,6 +56,7 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
         cost_list.append(total_cost)
         if len(cost_list) > early_stop_rounds and np.min(cost_list[-early_stop_rounds:]) >= np.min(cost_list[:-early_stop_rounds]):
             break
+    assert route_validity_check(cur_routes, nb_customers, truck_capacity, demands_dict, service_time_dict, earliest_start_dict, latest_end_dict), f"wrong routes: {cur_routes}"
     res_dict[exp_round] = (total_cost, cur_routes)
     return
 

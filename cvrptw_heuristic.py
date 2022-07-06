@@ -96,6 +96,15 @@ def is_valid_pos(route, pos, customer, service_time, earliest_start, latest_end)
     new_route = route[:pos] + [customer] + route[pos:]
     return time_window_check(new_route, service_time, earliest_start, latest_end)
 
+
+def route_validity_check(cur_routes, nb_customers, truck_capacity, demands, service_time, earliest_start, latest_end):
+    num_customers = 0
+    for route in cur_routes.values():
+        if np.sum([demands[c] for c in route]) > truck_capacity or (not time_window_check(route, service_time, earliest_start, latest_end)):
+            return False
+        num_customers += len(route)
+    return num_customers == nb_customers
+
 def time_window_check(route, service_time, earliest_start, latest_end):
     cur_time = 0.0
     for r in [depot] + route + [depot]:
