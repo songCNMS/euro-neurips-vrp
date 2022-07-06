@@ -252,12 +252,12 @@ def read_solomon(filename):
     
     return {
         'is_depot': np.array([1] + [0] * nb_customers, dtype=bool),
-        'coords': np.array([(warehouse_x, warehouse_y)] + [(x,y) for x,y in zip(customers_x, customers_y)]),
-        'demands': np.array([0] + demands),
+        'coords': np.array([(warehouse_x, warehouse_y)] + [(x,y) for x,y in zip(customers_x, customers_y)]).astype(np.int),
+        'demands': np.array([0] + demands).astype(np.int),
         'capacity': truck_capacity,
-        'time_windows': np.array([[0, max_horizon]] + [[l, u] for l,u in zip(earliest_start, latest_end)]),
-        'service_times': np.array([0] + service_time),
-        'duration_matrix': duration_matrix
+        'time_windows': np.array([[0, max_horizon]] + [[l, u] for l,u in zip(earliest_start, latest_end)]).astype(np.int),
+        'service_times': np.array([0] + service_time).astype(np.int),
+        'duration_matrix': duration_matrix.astype(np.int)
     }
     
 

@@ -11,9 +11,11 @@ from cvrptw import read_input_cvrptw
 from tsp import get_tsp_solution
 from cvrptw_single_route import path_selection, cvrptw_one_vehicle, add_path
 import tools
+from solver import solve_static_vrptw
 
 
 depot = "Customer_0"
+
 
 def construct_solution_from_seed(seed_customers, all_customers, truck_capacity,
                                  demands, service_time, 
@@ -233,10 +235,8 @@ def get_problem_dict(nb_customers,
 def generate_init_solution(nb_customers, truck_capacity,
                            demands, service_time, 
                            earliest_start, latest_end, max_horizon, 
-                           distance_warehouses, distance_matrix,
-                           paths_dict, paths_cost_dict, paths_customers_dict):
-    
-    min_path_frag_len, max_path_frag_len = 10, 50
+                           distance_warehouses, distance_matrix):
+    min_path_frag_len, max_path_frag_len = 20, 50
     print("solving a non-constraint tsp problem")
     tsp_solution = get_tsp_solution(nb_customers, distance_warehouses, distance_matrix)
     all_customers, demands_dict, \
@@ -244,6 +244,17 @@ def generate_init_solution(nb_customers, truck_capacity,
             distance_matrix_dict = get_problem_dict(nb_customers, demands, service_time,
                                                     earliest_start, latest_end, max_horizon,
                                                     distance_warehouses, distance_matrix)
+    paths_dict = {}
+    paths_cost_dict = {}
+    paths_customers_dict = {}
+    for i in range(nb_customers):
+        path_name = f"PATH_{i}"
+        customer = f"Customer_{i+1}"
+        paths_dict[path_name] = [customer]
+        paths_cost_dict[path_name] = distance_warehouses[i]*2
+        for j in range(nb_customers):
+            paths_customers_dict[path_name, f"Customer_{j+1}"] = 0
+        paths_customers_dict[path_name, customer] = 1
                                                                                         
     # initialize path from tsp
     num_selected_customers = 0
@@ -301,23 +312,10 @@ def one_round_heuristics(exp_round, round_res_dict, nb_customers, truck_capacity
                     = get_problem_dict(nb_customers, demands, service_time,
                                        earliest_start, latest_end, max_horizon,
                                        distance_warehouses, distance_matrix)
-    paths_dict = {}
-    paths_cost_dict = {}
-    paths_customers_dict = {}
-    for i in range(nb_customers):
-        path_name = f"PATH_{i}"
-        customer = f"Customer_{i+1}"
-        paths_dict[path_name] = [customer]
-        paths_cost_dict[path_name] = distance_warehouses[i]*2
-        for j in range(nb_customers):
-            paths_customers_dict[path_name, f"Customer_{j+1}"] = 0
-        paths_customers_dict[path_name, customer] = 1
-        
-    cur_routes, total_cost, paths_dict, paths_cost_dict, paths_customers_dict = \
+    cur_routes, total_cost, _, _, _ = \
                             generate_init_solution(nb_customers, truck_capacity, demands, service_time,
                                                     earliest_start, latest_end, max_horizon,
-                                                    distance_warehouses, distance_matrix,
-                                                    paths_dict, paths_cost_dict, paths_customers_dict)
+                                                    distance_warehouses, distance_matrix)
     
     
     cost_list = []
