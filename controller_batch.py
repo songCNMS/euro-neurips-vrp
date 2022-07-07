@@ -97,17 +97,20 @@ if __name__ == "__main__":
 
             # Catch remaining output and wait at most 10 secs for solver thread to finish gracefully
             return_code = p.wait(10)
-            assert return_code == 0, "Solver did not exit succesfully"
+            # assert return_code == 0, "Solver did not exit succesfully"
 
-        assert done, "Environment is not finished"
+        # assert done, "Environment is not finished"
         # Write results
-        print(f"------ Controller ------")
-        print(f"Cost of solution: {sum(env.final_costs.values())}")
-        print("Solution:")
-        print(tools.json_dumps_np(env.final_solutions))
+        if done and (return_code == 0):
+            print(f"------ Controller ------")
+            print(f"Cost of solution: {sum(env.final_costs.values())}")
+            print("Solution:")
+            print(tools.json_dumps_np(env.final_solutions))
+            route_num, total_cost = len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values())
+        else: route_num, total_cost = -1, 1
         problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         sota = sota_res_dict.get(problem_name, (1, 1))
-        result_list.append([problem, len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values()), sota[1], sota[0]])
+        result_list.append([problem, route_num, total_cost, sota[1], sota[0]])
         res_df = pd.DataFrame(data=result_list, columns=['problem', 'vehicles', 'total_cost', 'sota_vehicles', 'sota_cost'])
         res_df.loc[:, "gap"] = (res_df["total_cost"] - res_df["sota_cost"])/res_df["sota_cost"]
         res_df.to_csv(res_file_name, index=False)

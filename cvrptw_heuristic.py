@@ -137,9 +137,7 @@ def route_insertion_cost(route, customer, service_time,
 
 def compute_route_cost(routes, distance_matrix):
     total_cost = 0.0
-    num_nodes = 0
     for route in routes.values():
-        num_nodes += len(route)
         total_cost += distance_matrix[depot][route[0]]
         for i in range(len(route)-1):
             total_cost += distance_matrix[route[i]][route[i+1]]
@@ -391,7 +389,9 @@ def main(problem_file, round_res_dict, m_process, solo=True):
     round_cost_list = sorted([(round, val[0]) for round, val in round_res_dict.items()], key=lambda x: x[1])
     print(round_cost_list)
     best_round = round_cost_list[0][0]
-    return len(round_res_dict[best_round][1]), round(round_res_dict[best_round][0],2)
+    if solo: total_cost = round(round_res_dict[best_round][0]/100,2)
+    else: total_cost = round(round_res_dict[best_round][0],2)
+    return len(round_res_dict[best_round][1]), total_cost
     
 
 import multiprocessing as mp
