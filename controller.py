@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import threading
 from environment import VRPEnvironment
+from cvrptw import compute_cost_from_routes
 
 
 if __name__ == "__main__":
@@ -87,7 +88,12 @@ if __name__ == "__main__":
 
     assert done, "Environment is not finished"
     # Write results
+    if is_solo:
+        route_num = len(env.final_solutions[env.end_epoch])
+        print(env.final_solutions[env.end_epoch])
+        total_cost = compute_cost_from_routes(env.final_solutions[env.end_epoch], static_instance['coords'])
+    else: route_num, total_cost = len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values())
     print(f"------ Controller ------")
-    print(f"Cost of solution: {sum(env.final_costs.values())}")
+    print(f"Cost of solution: {total_cost}")
     print("Solution:")
     print(tools.json_dumps_np(env.final_solutions))

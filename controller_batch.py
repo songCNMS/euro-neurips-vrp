@@ -10,6 +10,8 @@ from environment import VRPEnvironment
 import os
 from datetime import datetime
 import pandas as pd
+from cvrptw import compute_cost_from_routes
+
 
 
 if __name__ == "__main__":
@@ -106,8 +108,11 @@ if __name__ == "__main__":
             print(f"Cost of solution: {sum(env.final_costs.values())}")
             print("Solution:")
             print(tools.json_dumps_np(env.final_solutions))
-            route_num, total_cost = len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values())
-        else: route_num, total_cost = -1, 1
+            if is_solo:
+                route_num = len(env.final_solutions[env.end_epoch])
+                total_cost = compute_cost_from_routes(env.final_solutions[env.end_epoch], static_instance['coords'])
+            else: route_num, total_cost = len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values())
+        else: route_num, total_cost = -1, -1
         problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         sota = sota_res_dict.get(problem_name, (1, 1))
         result_list.append([problem, route_num, total_cost, sota[1], sota[0]])

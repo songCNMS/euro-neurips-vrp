@@ -82,8 +82,20 @@ def compute_distance_warehouses(depot_x, depot_y, customers_x, customers_y):
 
 
 def compute_dist(xi, xj, yi, yj):
-    # return int(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)))
-    return int(round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)*100)
+    return int(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)))
+    # return int(round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)*100)
+
+def compute_dist_float(xi, xj, yi, yj):
+    return round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)
+
+
+def compute_cost_from_routes(cur_routes, coords):
+    total_cost = 0.0
+    for j in range(len(cur_routes)):
+        _route = [0] + list(cur_routes[j]) + [0]
+        for i in range(len(_route)-1):
+            total_cost += compute_dist_float(coords[_route[i]][0], coords[_route[i+1]][0], coords[_route[i]][1], coords[_route[i+1]][1])
+    return round(total_cost, 2)
 
 
 # depots = dat.depots1

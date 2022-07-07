@@ -7,7 +7,7 @@ from pulp import *
 import sys
 import os
 import pickle
-from cvrptw import read_input_cvrptw
+from cvrptw import read_input_cvrptw, compute_cost_from_routes
 from tsp import get_tsp_solution
 from cvrptw_single_route import path_selection, cvrptw_one_vehicle, add_path
 import tools
@@ -349,6 +349,7 @@ def main(problem_file, round_res_dict, m_process, solo=True):
     if solo:
         (nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
                 earliest_start, latest_end, max_horizon, warehouse_x, warehouse_y, customers_x, customers_y) = read_input_cvrptw(problem_file)
+        problem = tools.read_solomon(problem_file)
     else:
         problem = tools.read_vrplib(problem_file)
         nb_customers = len(problem['is_depot']) - 1
@@ -379,6 +380,17 @@ def main(problem_file, round_res_dict, m_process, solo=True):
                                                                 distance_warehouses, distance_matrix,))
             procs.append(proc)
             proc.start()
+        TIMEOUT = (6 * nb_customers)
+        start = time.time()
+        while time.time() - start <= TIMEOUT:
+            if not any(p.is_alive() for p in procs):
+                break
+            time.sleep(120)
+        else:
+            # We only enter this if we didn't 'break' above.
+            print("timed out, killing all processes")
+            for p in procs:
+                p.terminate()
         for proc in procs:
             proc.join()
     else:
@@ -388,11 +400,17 @@ def main(problem_file, round_res_dict, m_process, solo=True):
                              distance_warehouses, distance_matrix)
     round_cost_list = sorted([(round, val[0]) for round, val in round_res_dict.items()], key=lambda x: x[1])
     print(round_cost_list)
-    best_round = round_cost_list[0][0]
-    if solo: total_cost = round(round_res_dict[best_round][0]/100,2)
-    else: total_cost = round(round_res_dict[best_round][0],2)
-    return len(round_res_dict[best_round][1]), total_cost
-    
+    if len(round_cost_list) > 0:
+        best_round = round_cost_list[0][0]
+        best_routes = round_res_dict[best_round][1]
+        if solo:
+            routes = []
+            for _, route in best_routes.items():
+                routes.append([int(c.split('_')[1]) for c in route])
+            total_cost = compute_cost_from_routes(routes, problem['coords'])
+        else: total_cost = round(round_res_dict[best_round][0],2)
+        return len(round_res_dict[best_round][1]), total_cost
+    else: return -1, -1
 
 import multiprocessing as mp
 from datetime import datetime
