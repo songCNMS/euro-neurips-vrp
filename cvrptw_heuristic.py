@@ -380,7 +380,7 @@ def main(problem_file, round_res_dict, m_process, solo=True):
                                                                 distance_warehouses, distance_matrix,))
             procs.append(proc)
             proc.start()
-        TIMEOUT = (6 * nb_customers)
+        TIMEOUT = (12 * nb_customers)
         start = time.time()
         while time.time() - start <= TIMEOUT:
             if not any(p.is_alive() for p in procs):

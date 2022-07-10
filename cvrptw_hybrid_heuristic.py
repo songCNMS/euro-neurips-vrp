@@ -19,7 +19,7 @@ depot = "Customer_0"
 
 def construct_solution_from_ge_solver(instance, seed=1, tmp_dir='tmp'):
     print("solving using ges method")
-    solutions = list(solve_static_vrptw(instance, time_limit=600, seed=seed, tmp_dir=tmp_dir))
+    solutions = list(solve_static_vrptw(instance, time_limit=240, seed=seed, tmp_dir=tmp_dir))
     # assert len(solutions) >= 1, "failed to init"
     if len(solutions) >= 1: return solutions[-1]
     else: return None, None
@@ -36,6 +36,7 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
     
     if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
     else: init_routes, total_cost = None, None
+    # init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
     num_episodes = 100000
     early_stop_rounds = 200
     if init_routes is None:
@@ -107,7 +108,7 @@ def main(problem_file, round_res_dict, m_process, solo=True):
                                                                  distance_warehouses, distance_matrix,))
             procs.append(proc)
             proc.start()
-        TIMEOUT = (6 * nb_customers)
+        TIMEOUT = (12 * nb_customers)
         start = time.time()
         while time.time() - start <= TIMEOUT:
             if not any(p.is_alive() for p in procs):

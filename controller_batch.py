@@ -49,6 +49,7 @@ if __name__ == "__main__":
     result_list = []
     for problem in problem_list:
         problem_file = os.path.join(dir_name, problem)
+        print(problem_file)
         if is_solo: static_instance = tools.read_solomon(problem_file)
         else: static_instance = tools.read_vrplib(problem_file)
 
