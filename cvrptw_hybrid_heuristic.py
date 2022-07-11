@@ -34,17 +34,17 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
                                                     earliest_start, latest_end, max_horizon,
                                                     distance_warehouses, distance_matrix)
     
-    if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
-    else: init_routes, total_cost = None, None
-    # init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
+    # if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
+    # else: init_routes, total_cost = None, None
+    init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
     num_episodes = 100000
     early_stop_rounds = 200
     if init_routes is None:
         np.random.seed(exp_round)
         cur_routes, total_cost, _, _, _ = \
                                 generate_init_solution(nb_customers, truck_capacity, demands, service_time,
-                                                        earliest_start, latest_end, max_horizon,
-                                                        distance_warehouses, distance_matrix)
+                                                       earliest_start, latest_end, max_horizon,
+                                                       distance_warehouses, distance_matrix)
     else:
         cur_routes = {}
         for i, route in enumerate(init_routes):
@@ -152,6 +152,7 @@ parser.add_argument("--batch", action="store_true")
 parser.add_argument("--mp", action="store_true")
 parser.add_argument("--remote", action="store_true")
 args = parser.parse_args()
+
 
 if args.remote: 
     data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
