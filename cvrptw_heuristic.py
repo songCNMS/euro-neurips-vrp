@@ -72,18 +72,12 @@ def cvrptw_one_route(selected_customers, truck_capacity,
             best_route = route[:]
     return best_route
 
-def select_candidate_points(routes, distance_matrix, all_customers, only_short_routes=False):
-    if only_short_routes:
-        route_list = sorted([(r, len(r)) for r in routes.keys()], key=lambda x: x[1])
-        route_list = [x[0] for x in route_list]
-        route_key = np.random.choice(route_list[:min(5, len(route_list))])
-    else: route_key = np.random.choice(list(routes.keys()))
-    route = routes[route_key]
+def extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers):
+    route = routes[route_name]
     if len(route) <= 2: 
         M = route[:]
         prev_node = next_node = depot
     else:
-        node_idx = np.random.randint(0, len(route)-1)
         M = route[node_idx:node_idx+2]
         prev_node = (depot if node_idx == 0 else route[node_idx-1])
         next_node = (depot if node_idx == len(route)-2 else route[node_idx+2])
@@ -92,10 +86,25 @@ def select_candidate_points(routes, distance_matrix, all_customers, only_short_r
     M.extend([dist[i][0] for i in range(min(4, len(dist)))])
     return M
 
+def select_candidate_points(routes, distance_matrix, all_customers, only_short_routes=False):
+    if only_short_routes:
+        route_list = sorted([(r, len(r)) for r in routes.keys()], key=lambda x: x[1])
+        route_list = [x[0] for x in route_list]
+        route_name = np.random.choice(route_list[:min(5, len(route_list))])
+    else: route_name = np.random.choice(list(routes.keys()))
+    route = routes[route_name]
+    node_idx = np.random.randint(0, len(route)-1)
+    M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
+    return M
+
+
+def select_candidate_points_ML(model, routes, distance_matrix, all_customers):
+    pass
+
+
 def is_valid_pos(route, pos, customer, service_time, earliest_start, latest_end):
     new_route = route[:pos] + [customer] + route[pos:]
     return time_window_check(new_route, service_time, earliest_start, latest_end)
-
 
 def route_validity_check(cur_routes, nb_customers, truck_capacity, demands, service_time, earliest_start, latest_end):
     num_customers = 0
@@ -208,7 +217,7 @@ def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, se
             else: new_routes[route_name] = route
         ori_total_cost = min_total_cost_increase + total_cost_before_insert
     else: new_routes = cur_routes
-    return new_routes, ori_total_cost
+    return new_routes, ori_total_cost, customers
 
 def get_problem_dict(nb_customers,
                      demands, service_time, 
@@ -330,7 +339,7 @@ def one_round_heuristics(exp_round, round_res_dict, nb_customers, truck_capacity
     cost_list.append(total_cost)
     # fine tuning using dual-variable
     for i in range(num_episodes):
-        cur_routes, total_cost = heuristic_improvement(cur_routes, all_customers, truck_capacity, 
+        cur_routes, total_cost, _ = heuristic_improvement(cur_routes, all_customers, truck_capacity, 
                                                        demands_dict, service_time_dict, 
                                                        earliest_start_dict, latest_end_dict,
                                                        distance_matrix_dict)
@@ -416,24 +425,25 @@ import multiprocessing as mp
 from datetime import datetime
 import matplotlib.pyplot as plt
 import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument("--problem", type=str)
-parser.add_argument("--instance", type=str)
-parser.add_argument("--retrain", action="store_true")
-parser.add_argument("--opt", action="store_true")
-parser.add_argument("--batch", action="store_true")
-parser.add_argument("--mp", action="store_true")
-parser.add_argument("--remote", action="store_true")
-args = parser.parse_args()
-
-if args.remote: 
-    data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
-    output_dir = os.environ['AMLT_OUTPUT_DIR']
-else:
-    data_dir = "./"
-    output_dir = "./"
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--problem", type=str)
+    parser.add_argument("--instance", type=str)
+    parser.add_argument("--retrain", action="store_true")
+    parser.add_argument("--opt", action="store_true")
+    parser.add_argument("--batch", action="store_true")
+    parser.add_argument("--mp", action="store_true")
+    parser.add_argument("--remote", action="store_true")
+    args = parser.parse_args()
+
+    if args.remote: 
+        data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
+        output_dir = os.environ['AMLT_OUTPUT_DIR']
+    else:
+        data_dir = "./"
+        output_dir = "./"
+
     sota_res = pd.read_csv("sota_res.csv")
     sota_res_dict = {row["problem"]: (row["distance"], row["vehicle"]) for _, row in sota_res.iterrows()}
     manager = mp.Manager()

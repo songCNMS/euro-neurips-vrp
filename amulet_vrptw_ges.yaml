@@ -29,27 +29,27 @@ data:
 
 # list of jobs to run, we run 2 jobs in this example
 jobs:
-- name: vrptw_ortec
-  sku: C32
-  command:
-  - python controller_batch.py --instance ortec --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-- name: vrptw_200
-  sku: C32
-  command:
-  - python controller_batch.py --instance 200 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
+# - name: vrptw_ortec
+#   sku: C32
+#   command:
+#   - python controller_batch.py --instance ortec --static --epoch_tlim 1200 --remote --  python solver.py --verbose
+# - name: vrptw_200
+#   sku: C32
+#   command:
+#   - python controller_batch.py --instance 200 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
 - name: vrptw_400
-  sku: C32
+  sku: C1
   command:
   - python controller_batch.py --instance 400 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-- name: vrptw_600
-  sku: C32
-  command:
-  - python controller_batch.py --instance 600 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-- name: vrptw_800
-  sku: C32
-  command:
-  - python controller_batch.py --instance 800 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-- name: vrptw_1000
-  sku: C32
-  command:
-  - python controller_batch.py --instance 1000 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
+# - name: vrptw_600
+#   sku: C32
+#   command:
+#   - python controller_batch.py --instance 600 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
+# - name: vrptw_800
+#   sku: C32
+#   command:
+#   - python controller_batch.py --instance 800 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
+# - name: vrptw_1000
+#   sku: C32
+#   command:
+#   - python controller_batch.py --instance 1000 --static --epoch_tlim 1200 --remote --  python solver.py --verbose

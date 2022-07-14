@@ -1,3 +1,5 @@
 .vscode
 .flake8
 tmp
+predict_data
+amlt

@@ -8,8 +8,6 @@ import sys
 import os
 import pickle
 from cvrptw import read_input_cvrptw, compute_cost_from_routes
-from tsp import get_tsp_solution
-from cvrptw_single_route import path_selection, cvrptw_one_vehicle, add_path
 import tools
 from solver import solve_static_vrptw
 from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check
@@ -17,9 +15,9 @@ from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_i
 
 depot = "Customer_0"
 
-def construct_solution_from_ge_solver(instance, seed=1, tmp_dir='tmp'):
+def construct_solution_from_ge_solver(instance, seed=1, tmp_dir='tmp', time_limit=240):
     print("solving using ges method")
-    solutions = list(solve_static_vrptw(instance, time_limit=240, seed=seed, tmp_dir=tmp_dir))
+    solutions = list(solve_static_vrptw(instance, time_limit=time_limit, seed=seed, tmp_dir=tmp_dir))
     # assert len(solutions) >= 1, "failed to init"
     if len(solutions) >= 1: return solutions[-1]
     else: return None, None
@@ -53,10 +51,10 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
     print(f"Round: {exp_round}, init cost {total_cost}")
     cost_list = []
     for i in range(num_episodes):
-        cur_routes, total_cost = heuristic_improvement(cur_routes, all_customers, truck_capacity, 
-                                                       demands_dict, service_time_dict, 
-                                                       earliest_start_dict, latest_end_dict,
-                                                       distance_matrix_dict)
+        cur_routes, total_cost, _ = heuristic_improvement(cur_routes, all_customers, truck_capacity, 
+                                                          demands_dict, service_time_dict, 
+                                                          earliest_start_dict, latest_end_dict,
+                                                          distance_matrix_dict)
         print(f"Round: {exp_round}, fine tune {i}, total cost: {total_cost}")
         cost_list.append(total_cost)
         res_dict[exp_round] = (total_cost, cur_routes)
@@ -145,23 +143,24 @@ import multiprocessing as mp
 from datetime import datetime
 import matplotlib.pyplot as plt
 import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument("--problem", type=str)
-parser.add_argument("--instance", type=str)
-parser.add_argument("--batch", action="store_true")
-parser.add_argument("--mp", action="store_true")
-parser.add_argument("--remote", action="store_true")
-args = parser.parse_args()
 
-
-if args.remote: 
-    data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
-    output_dir = os.environ['AMLT_OUTPUT_DIR']
-else:
-    data_dir = "./"
-    output_dir = "./"
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--problem", type=str)
+    parser.add_argument("--instance", type=str)
+    parser.add_argument("--batch", action="store_true")
+    parser.add_argument("--mp", action="store_true")
+    parser.add_argument("--remote", action="store_true")
+    args = parser.parse_args()
+
+
+    if args.remote: 
+        data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
+        output_dir = os.environ['AMLT_OUTPUT_DIR']
+    else:
+        data_dir = "./"
+        output_dir = "./"
     sota_res = pd.read_csv("sota_res.csv")
     sota_res_dict = {row["problem"]: (row["distance"], row["vehicle"]) for _, row in sota_res.iterrows()}
     manager = mp.Manager()

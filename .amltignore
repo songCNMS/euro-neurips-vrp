@@ -3,3 +3,4 @@ cvrp_benchmarks
 instances
 __pycache__
 tmp
+predict_data
