@@ -117,19 +117,21 @@ def train_model(model, optimizer, lossfunc, dataset, eval_dataset=None):
             train_loss += loss.item()
             optimizer.step()
             if (iteration+1) % 100 == 0:
-                print(f"Epoch {epoch}, iter {iteration}:", acc_mrse_compute(outputs,labels))
+                acc = acc_mrse_compute(outputs, labels)
+                print(f"Epoch {epoch}, iter {iteration}:", acc)
                 print(outputs[:10], labels[:10])
             iteration += 1
         train_loss_list.append(train_loss/iteration)
-        if eval_dataset is not None: total_loss = eval_model(model, lossfunc, eval_dataset)
-        else: total_loss = eval_model(model, lossfunc, dataset)
-        eval_loss_list.append(total_loss)
+        if eval_dataset is not None: eval_loss = eval_model(model, lossfunc, eval_dataset)
+        else: eval_loss = eval_model(model, lossfunc, dataset)
+        eval_loss_list.append(eval_loss)
+        wandb.log({"train_loss": train_loss, "eval_loss": eval_loss})
         if np.min(eval_loss_list) == eval_loss_list[-1]:
             pt.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'loss': total_loss,
+                'loss': train_loss,
             }, 'model.pt')
         plt.plot(train_loss_list, label='train loss')
         plt.plot(eval_loss_list, label='eval loss')
@@ -265,13 +267,16 @@ def get_local_features(folder_name, eval=False):
     np.save("predict_data/all_data.cost", costs, allow_pickle=False)
     return candidates, customers, costs
 
-
+from datetime import datetime
 import time
 import multiprocessing as mp
 from datetime import datetime
 import matplotlib.pyplot as plt
 import argparse
-
+import wandb
+import os
+os.environ["WANDB_API_KEY"] = "116a4f287fd4fbaa6f790a50d2dd7f97ceae4a03"
+wandb.login()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -324,7 +329,9 @@ if __name__ == '__main__':
     elif args.data:
         for problem_file, exp_round, is_solo in all_experiments_list:
             proc = get_features(problem_file, exp_round, is_solo)
-    else:    
+    else:
+        exp_name = datetime.now().date().strftime("%m%d-%H%M")
+        wandb.init(project="VRPTW", config={}, name=exp_name)
         input_dim = feature_dim*(selected_nodes_num+2)
         # loss func and optim
         model = MLP_Model().to(device)
