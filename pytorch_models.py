@@ -13,8 +13,8 @@ from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
 from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution
 route_output_dim = 128
 max_num_route = 30
-max_num_nodes_per_route = 20
-
+max_num_nodes_per_route = 2
+device = "cuda:0"
 
 class Route_Model(pt.nn.Module):
     def __init__(self):
@@ -23,7 +23,7 @@ class Route_Model(pt.nn.Module):
     
     def forward(self, x):
         x = x.reshape(max_num_nodes_per_route, -1, feature_dim)
-        h = pt.torch.zeros(8, x.size(1), route_output_dim)
+        h = pt.torch.zeros(8, x.size(1), route_output_dim).to(device)
         return self.rnn(x, h)
 
 
@@ -96,8 +96,8 @@ def eval_model(model, lossfunc, dataset):
     with pt.no_grad():
         iteration = 0
         for candidates, customers, labels in dataloader:
-            outputs = model(candidates, customers).squeeze(axis=1)
-            loss = lossfunc(outputs, labels)
+            outputs = model(candidates.to(device), customers.to(device)).squeeze(axis=1)
+            loss = lossfunc(outputs, labels.to(device))
             total_loss += loss.item()
             iteration += 1
     return total_loss/iteration
@@ -111,8 +111,8 @@ def train_model(model, optimizer, lossfunc, dataset, eval_dataset=None):
         train_loss = 0.0
         for candidates, customers, labels in train_dataloader:
             optimizer.zero_grad()
-            outputs = model(candidates, customers).squeeze(axis=1)
-            loss = lossfunc(outputs, labels)
+            outputs = model(candidates.to(device), customers.to(device)).squeeze(axis=1)
+            loss = lossfunc(outputs, labels.to(device))
             loss.backward()
             train_loss += loss.item()
             optimizer.step()
@@ -135,7 +135,7 @@ def train_model(model, optimizer, lossfunc, dataset, eval_dataset=None):
         plt.plot(eval_loss_list, label='eval loss')
         plt.ylabel('train and eval loss')
         plt.legend()
-        os.remove("loss.png")
+        # if os.path.exists("loss.png"): os.remove("loss.png")
         plt.savefig("loss.png")
         plt.close()
     return model, optimizer
@@ -291,7 +291,7 @@ if __name__ == '__main__':
 
     # instance_list = ["200", "400", "600", "800", "1000", "ortec"]
     instance_list = ["ortec"]
-    max_exp_round = 20
+    max_exp_round = 2
     all_experiments_list = []
     for exp_round in range(1, max_exp_round+1):
         for instance in instance_list:
@@ -327,10 +327,10 @@ if __name__ == '__main__':
     else:    
         input_dim = feature_dim*(selected_nodes_num+2)
         # loss func and optim
-        model = MLP_Model()
-        optimizer = pt.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.01)
-        # optimizer = pt.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-        lossfunc = pt.nn.MSELoss()
+        model = MLP_Model().to(device)
+        # optimizer = pt.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.01)
+        optimizer = pt.optim.SGD(model.parameters(), lr=0.001)
+        lossfunc = pt.nn.MSELoss().to(device)
         # data_folder = "amlt/vrptw_feature/vrptw_ortec/predict_data/"
         data_folder = f"{output_dir}/predict_data/"
         candidate_features, customer_features, cost_improvements = get_local_features(data_folder)
