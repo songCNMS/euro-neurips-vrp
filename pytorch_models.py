@@ -121,7 +121,8 @@ def train_model(model, optimizer, lossfunc, dataset, eval_dataset=None):
                 print(f"Epoch {epoch}, iter {iteration}:", acc)
                 print(outputs[:10], labels[:10])
             iteration += 1
-        train_loss_list.append(train_loss/iteration)
+        train_loss = train_loss/iteration
+        train_loss_list.append(train_loss)
         if eval_dataset is not None: eval_loss = eval_model(model, lossfunc, eval_dataset)
         else: eval_loss = eval_model(model, lossfunc, dataset)
         eval_loss_list.append(eval_loss)
