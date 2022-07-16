@@ -103,7 +103,7 @@ def eval_model(model, lossfunc, dataset):
     return total_loss/iteration
 
 
-def train_model(model, optimizer, lossfunc, dataset, eval_dataset=None):
+def train_model(model, optimizer, lossfunc, dataset, output_dir, eval_dataset=None):
     train_dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
     train_loss_list,  eval_loss_list = [], []
     for epoch in range(2000):
@@ -133,13 +133,13 @@ def train_model(model, optimizer, lossfunc, dataset, eval_dataset=None):
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': train_loss,
-            }, 'model.pt')
+            }, f'{output_dir}/model.pt')
         plt.plot(train_loss_list, label='train loss')
         plt.plot(eval_loss_list, label='eval loss')
         plt.ylabel('train and eval loss')
         plt.legend()
         # if os.path.exists("loss.png"): os.remove("loss.png")
-        plt.savefig("loss.png")
+        plt.savefig(f"{output_dir}/loss.png")
         plt.close()
     return model, optimizer
                 
@@ -239,10 +239,10 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
     return candidate_features, customer_features, cost_improvements
 
 def get_local_features(folder_name, eval=False):
-    if os.path.exists("predict_data/all_data.candidates.npy"):
-        candidates = np.load("predict_data/all_data.candidates.npy")
-        customers = np.load("predict_data/all_data.customers.npy")
-        costs = np.load("predict_data/all_data.cost.npy")
+    if os.path.exists(f"{folder_name}/all_data.candidates.npy"):
+        candidates = np.load(f"{folder_name}/all_data.candidates.npy")
+        customers = np.load(f"{folder_name}/all_data.customers.npy")
+        costs = np.load(f"{folder_name}/all_data.cost.npy")
         return candidates, customers, costs
     all_files = os.listdir(folder_name)
     problem_list = [f.split('.')[0] for f in all_files if f.find("cost") >= 0]
@@ -252,8 +252,8 @@ def get_local_features(folder_name, eval=False):
     for problem in problem_list:
         print(f"loading {problem}")
         exp_round = int(problem.split('_')[-1])
-        if eval and exp_round < 13: continue
-        elif (not eval) and exp_round >= 13: continue
+        if eval and exp_round < 45: continue
+        elif (not eval) and exp_round >= 45: continue
         problem_file = os.path.join(folder_name, problem)
         candidates_list.append(np.load(problem_file + ".candidates.npy"))
         customers_list.append(np.load(problem_file+".customers.npy"))
@@ -263,9 +263,9 @@ def get_local_features(folder_name, eval=False):
     costs = np.array([(x-mean_cost)/std_cost for x in costs])
     candidates = np.concatenate(candidates_list, axis=0)
     customers = np.concatenate(customers_list, axis=0)
-    np.save("predict_data/all_data.candidates", candidates, allow_pickle=False)
-    np.save("predict_data/all_data.customers", customers, allow_pickle=False)
-    np.save("predict_data/all_data.cost", costs, allow_pickle=False)
+    np.save(f"{folder_name}/all_data.candidates", candidates, allow_pickle=False)
+    np.save(f"{folder_name}/all_data.customers", customers, allow_pickle=False)
+    np.save(f"{folder_name}/all_data.cost", costs, allow_pickle=False)
     return candidates, customers, costs
 
 from datetime import datetime
@@ -340,9 +340,9 @@ if __name__ == '__main__':
         optimizer = pt.optim.SGD(model.parameters(), lr=0.001)
         lossfunc = pt.nn.MSELoss().to(device)
         # data_folder = "amlt/vrptw_feature/vrptw_ortec/predict_data/"
-        data_folder = f"{output_dir}/predict_data/"
+        data_folder = f"{data_dir}/cvrp_benchmarks/predict_data/"
         candidate_features, customer_features, cost_improvements = get_local_features(data_folder)
         candidate_features_eval, customer_features_eval, cost_improvements_eval = get_local_features(data_folder, eval=True)
         vrptw_dataset = VRPTWDataset(candidate_features, customer_features, cost_improvements)
         vrptw_dataset_eval = VRPTWDataset(candidate_features_eval, customer_features_eval, cost_improvements_eval)
-        train_model(model, optimizer, lossfunc, vrptw_dataset, eval_dataset=vrptw_dataset_eval)
+        train_model(model, optimizer, lossfunc, vrptw_dataset, output_dir, eval_dataset=vrptw_dataset_eval)

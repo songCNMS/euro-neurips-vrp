@@ -4,3 +4,8 @@ instances
 __pycache__
 tmp
 predict_data
+wandb
+predict_data__
+amlt
+.vscode
+*.pt
