@@ -14,7 +14,9 @@ from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_i
 route_output_dim = 128
 max_num_route = 30
 max_num_nodes_per_route = 2
-device = "cuda:0"
+
+if pt.cuda.is_available(): device = "cuda:0"
+else: device = "cpu"
 
 class Route_Model(pt.nn.Module):
     def __init__(self):
@@ -49,7 +51,7 @@ class MLP_Model(pt.nn.Module):
             x_r = x_r[-1, :, :]
             route_rnn_output_list.append(x_r)
         x_r = pt.torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
-        x = pt.torch.concat((x_r, x_c), axis=1)
+        x = pt.torch.cat((x_r, x_c), axis=1)
         dout = pt.tanh(self.dropout(self.fc1(x)))
         dout = pt.tanh(self.fc2(dout))
         return self.fc3(dout)
@@ -91,7 +93,7 @@ def acc_mrse_compute(pred, label):
 
 
 def eval_model(model, lossfunc, dataset):
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=8, pin_memory=True)
     total_loss = 0.0
     with pt.no_grad():
         iteration = 0
@@ -104,7 +106,7 @@ def eval_model(model, lossfunc, dataset):
 
 
 def train_model(model, optimizer, lossfunc, dataset, output_dir, eval_dataset=None):
-    train_dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+    train_dataloader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=8, pin_memory=True)
     train_loss_list,  eval_loss_list = [], []
     for epoch in range(2000):
         iteration = 0
@@ -252,11 +254,14 @@ def get_local_features(folder_name, eval=False):
     for problem in problem_list:
         print(f"loading {problem}")
         exp_round = int(problem.split('_')[-1])
+        if exp_round <= 10: continue
         if eval and exp_round < 45: continue
         elif (not eval) and exp_round >= 45: continue
         problem_file = os.path.join(folder_name, problem)
         candidates_list.append(np.load(problem_file + ".candidates.npy"))
-        customers_list.append(np.load(problem_file+".customers.npy"))
+        tmp = np.load(problem_file+".customers.npy")
+        if len(tmp.shape) == 1: tmp = tmp.reshape(-1, feature_dim*selected_nodes_num)
+        customers_list.append(tmp)
         cost_improvements_list.append(np.load(problem_file+".cost.npy"))
     costs = np.concatenate(cost_improvements_list, axis=0)
     mean_cost, std_cost = np.mean(costs), np.std(costs)
@@ -331,8 +336,8 @@ if __name__ == '__main__':
         for problem_file, exp_round, is_solo in all_experiments_list:
             proc = get_features(problem_file, exp_round, is_solo)
     else:
-        exp_name = datetime.now().date().strftime("%m%d-%H%M")
-        wandb.init(project="VRPTW", config={}, name=exp_name)
+        exp_name = datetime.now().strftime("%m%d-%H%M")
+        wandb.init(dir=f"{output_dir}/wandb", project="VRPTW", config={}, name=exp_name)
         input_dim = feature_dim*(selected_nodes_num+2)
         # loss func and optim
         model = MLP_Model().to(device)
