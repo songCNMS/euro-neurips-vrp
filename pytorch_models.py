@@ -1,6 +1,4 @@
-from cmath import exp
 import torch as pt
-import torchvision as ptv
 from torch.utils.data import Dataset, DataLoader
 import os
 import pandas as pd
@@ -11,85 +9,8 @@ from cvrptw import read_input_cvrptw
 import tools
 from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
 from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution
-route_output_dim = 128
-max_num_route = 30
-max_num_nodes_per_route = 2
+from cvrptw_utility import map_node_to_route, VRPTWDataset, device,  acc_mrse_compute, MLP_Model
 
-if pt.cuda.is_available(): device = "cuda:0"
-else: device = "cpu"
-
-class Route_Model(pt.nn.Module):
-    def __init__(self):
-        super(Route_Model, self).__init__()
-        self.rnn = pt.nn.GRU(feature_dim, route_output_dim, 8)
-    
-    def forward(self, x):
-        x = x.reshape(max_num_nodes_per_route, -1, feature_dim)
-        h = pt.torch.zeros(8, x.size(1), route_output_dim).to(device)
-        return self.rnn(x, h)
-
-
-class MLP_Model(pt.nn.Module):
-    def __init__(self):
-        super(MLP_Model, self).__init__()
-        self.route_model = Route_Model()
-        self.candidate_model = pt.nn.Linear(2*feature_dim, 64)
-        self.fc1 = pt.nn.Linear(route_output_dim+64, 256)
-        self.fc2 = pt.nn.Linear(256, 128)
-        self.fc3 = pt.nn.Linear(128, 1)
-        self.dropout = pt.nn.Dropout(p=0.2)
-        pt.nn.init.xavier_uniform_(self.fc1.weight)
-        pt.nn.init.xavier_uniform_(self.fc2.weight)
-        pt.nn.init.xavier_uniform_(self.fc3.weight)
-        
-    def forward(self, candidates, customers):
-        x_c = self.candidate_model(candidates)
-        route_rnn_output_list = []
-        for i in range(max_num_route):
-            x_r = customers[:, i, :]
-            x_r, _ = self.route_model(x_r)
-            x_r = x_r[-1, :, :]
-            route_rnn_output_list.append(x_r)
-        x_r = pt.torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
-        x = pt.torch.cat((x_r, x_c), axis=1)
-        dout = pt.tanh(self.dropout(self.fc1(x)))
-        dout = pt.tanh(self.fc2(dout))
-        return self.fc3(dout)
-    
-
-class VRPTWDataset(Dataset):
-    def __init__(self, candidate_features, customer_features, costs):
-        self.labels = costs.astype(np.float32)
-        num_samples = len(costs)
-        self.candidates = candidate_features.reshape(num_samples, -1).astype(np.float32)
-        self.customers = np.zeros((num_samples, max_num_route, max_num_nodes_per_route*feature_dim))
-        customer_features = customer_features.reshape(num_samples, -1)
-        for i in range(num_samples):
-            j = -1 # route idx
-            k = 0 # node idx on current route
-            all_routes_features = customer_features[i, :]
-            for l in range(selected_nodes_num):
-                if np.sum(all_routes_features[l*feature_dim:]==0): break
-                elif np.sum(all_routes_features[l:feature_dim:(l+1)*feature_dim]) == 0:
-                    j += 1
-                    k = 0
-                elif k >= max_num_nodes_per_route-1: break
-                else:
-                    self.customers[i, j, feature_dim*k:feature_dim*(k+1)] = all_routes_features[l:feature_dim:(l+1)*feature_dim]
-                    k += 1
-        self.customers = self.customers.astype(np.float32)
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return self.candidates[idx, :], self.customers[idx, :, :], self.labels[idx]
-    
-    
-def acc_mrse_compute(pred, label):
-    pred = pred.cpu().data.numpy()
-    label = label.cpu().data.numpy()
-    return math.sqrt(np.mean((pred-label)**2))
 
 
 def eval_model(model, lossfunc, dataset):
@@ -145,11 +66,6 @@ def train_model(model, optimizer, lossfunc, dataset, output_dir, eval_dataset=No
         plt.close()
     return model, optimizer
                 
-def map_node_to_route(cur_routes):
-    node_to_route_dict = {}
-    for route_name, route in cur_routes.items():
-        for c in route: node_to_route_dict[c] = route_name
-    return node_to_route_dict
                 
 def get_features(problem_file, exp_round, output_dir, solo=True):
     problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
@@ -302,7 +218,7 @@ if __name__ == '__main__':
 
     # instance_list = ["200", "400", "600", "800", "1000", "ortec"]
     instance_list = ["ortec"]
-    max_exp_round = 2
+    max_exp_round = 50
     all_experiments_list = []
     for exp_round in range(1, max_exp_round+1):
         for instance in instance_list:

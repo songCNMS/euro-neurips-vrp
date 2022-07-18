@@ -1,9 +1,9 @@
 import numpy as np
-from cvrptw_hybrid_heuristic import depot
 
-
+depot = "Customer_0"
 feature_dim = 9 # (dist_to_prev_node, dist_to_next_node, service_time, earlieast_time, latest_time, arrival_time, demand, remaining_capacity, dist_to_depot)
 selected_nodes_num = 800
+
 
 def extract_features_for_nodes(node, node_to_route_dict, cur_routes,
                                truck_capacity, 
@@ -54,8 +54,6 @@ def extract_features_from_candidates(candidates, node_to_route_dict,
                                                         truck_capacity, demands, service_time,
                                                         earliest_start, latest_end,
                                                         distance_matrix, max_distance)
-    # customer_dist = sorted([(distance_matrix[candidates[0]][c], c) for c in all_customers], key=lambda x: x[0])
-    # nodes_num = len(all_customers) + selected_nodes_num
     customers_features = np.zeros((1, selected_nodes_num*feature_dim))
     i = 0
     for _, route in cur_routes.items():

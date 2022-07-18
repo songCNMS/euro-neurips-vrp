@@ -11,11 +11,7 @@ from cvrptw import read_input_cvrptw, compute_cost_from_routes
 from tsp import get_tsp_solution
 from cvrptw_single_route import path_selection, cvrptw_one_vehicle, add_path
 import tools
-from solver import solve_static_vrptw
-
-
-depot = "Customer_0"
-
+from cvrptw_utility import depot, select_candidate_points_ML
 
 def construct_solution_from_seed(seed_customers, all_customers, truck_capacity,
                                  demands, service_time, 
@@ -76,6 +72,7 @@ def extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_c
     route = routes[route_name]
     if len(route) <= 2: 
         M = route[:]
+        if len(M) <= 1: M.append(depot)
         prev_node = next_node = depot
     else:
         M = route[node_idx:node_idx+2]
@@ -96,12 +93,8 @@ def select_candidate_points(routes, distance_matrix, all_customers, only_short_r
     node_idx = np.random.randint(0, len(route)-1)
     M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
     return M
-
-
-def select_candidate_points_ML(model, routes, distance_matrix, all_customers):
-    pass
-
-
+    
+    
 def is_valid_pos(route, pos, customer, service_time, earliest_start, latest_end):
     new_route = route[:pos] + [customer] + route[pos:]
     return time_window_check(new_route, service_time, earliest_start, latest_end)
@@ -158,7 +151,8 @@ def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, se
                           earliest_start, latest_end,
                           distance_matrix, only_short_routes=False):
     ori_total_cost = compute_route_cost(cur_routes, distance_matrix)
-    customers = select_candidate_points(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
+    # customers = select_candidate_points(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
+    customers = select_candidate_points_ML(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
     routes_before_insert = {}
     # print("ori routes: ", cur_routes)
     for route_name, route in cur_routes.items():

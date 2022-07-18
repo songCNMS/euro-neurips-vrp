@@ -11,9 +11,8 @@ from cvrptw import read_input_cvrptw, compute_cost_from_routes
 import tools
 from solver import solve_static_vrptw
 from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check
+from candidate_predictor_features import depot
 
-
-depot = "Customer_0"
 
 def construct_solution_from_ge_solver(instance, seed=1, tmp_dir='tmp', time_limit=240):
     print("solving using ges method")
