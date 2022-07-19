@@ -11,7 +11,7 @@ from cvrptw import read_input_cvrptw, compute_cost_from_routes
 from tsp import get_tsp_solution
 from cvrptw_single_route import path_selection, cvrptw_one_vehicle, add_path
 import tools
-from cvrptw_utility import depot, select_candidate_points_ML
+from cvrptw_utility import depot, select_candidate_points_ML, select_candidate_points
 
 def construct_solution_from_seed(seed_customers, all_customers, truck_capacity,
                                  demands, service_time, 
@@ -67,32 +67,6 @@ def cvrptw_one_route(selected_customers, truck_capacity,
             min_cost = cost
             best_route = route[:]
     return best_route
-
-def extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers):
-    route = routes[route_name]
-    if len(route) <= 2: 
-        M = route[:]
-        if len(M) <= 1: M.append(depot)
-        prev_node = next_node = depot
-    else:
-        M = route[node_idx:node_idx+2]
-        prev_node = (depot if node_idx == 0 else route[node_idx-1])
-        next_node = (depot if node_idx == len(route)-2 else route[node_idx+2])
-    dist = [(c, distance_matrix[prev_node][c]+distance_matrix[c][next_node]) for c in all_customers if c not in route]
-    dist = sorted(dist, key=lambda x: x[1])
-    M.extend([dist[i][0] for i in range(min(4, len(dist)))])
-    return M
-
-def select_candidate_points(routes, distance_matrix, all_customers, only_short_routes=False):
-    if only_short_routes:
-        route_list = sorted([(r, len(r)) for r in routes.keys()], key=lambda x: x[1])
-        route_list = [x[0] for x in route_list]
-        route_name = np.random.choice(route_list[:min(5, len(route_list))])
-    else: route_name = np.random.choice(list(routes.keys()))
-    route = routes[route_name]
-    node_idx = np.random.randint(0, len(route)-1)
-    M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
-    return M
     
     
 def is_valid_pos(route, pos, customer, service_time, earliest_start, latest_end):
@@ -149,10 +123,15 @@ def compute_route_cost(routes, distance_matrix):
 
 def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, service_time, 
                           earliest_start, latest_end,
-                          distance_matrix, only_short_routes=False):
+                          distance_matrix, only_short_routes=False, model=None, max_distance=0):
     ori_total_cost = compute_route_cost(cur_routes, distance_matrix)
     # customers = select_candidate_points(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
-    customers = select_candidate_points_ML(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
+    customers = select_candidate_points_ML(model, cur_routes, distance_matrix, 
+                                           truck_capacity, all_customers,
+                                           demands, service_time,
+                                           earliest_start, latest_end,
+                                           max_distance)
+    print(customers)
     routes_before_insert = {}
     # print("ori routes: ", cur_routes)
     for route_name, route in cur_routes.items():

@@ -1,6 +1,5 @@
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from cvrptw_heuristic import extend_candidate_points
 
 
 depot = "Customer_0"
@@ -187,6 +186,31 @@ class VRPTWDataset(Dataset):
     def __getitem__(self, idx):
         return self.candidates[idx, :], self.customers[idx, :, :], self.labels[idx]
 
+def extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers):
+    route = routes[route_name]
+    if len(route) <= 2: 
+        M = route[:]
+        if len(M) <= 1: M.append(depot)
+        prev_node = next_node = depot
+    else:
+        M = route[node_idx:node_idx+2]
+        prev_node = (depot if node_idx == 0 else route[node_idx-1])
+        next_node = (depot if node_idx == len(route)-2 else route[node_idx+2])
+    dist = [(c, distance_matrix[prev_node][c]+distance_matrix[c][next_node]) for c in all_customers if c not in route]
+    dist = sorted(dist, key=lambda x: x[1])
+    M.extend([dist[i][0] for i in range(min(4, len(dist)))])
+    return M
+
+def select_candidate_points(routes, distance_matrix, all_customers, only_short_routes=False):
+    if only_short_routes:
+        route_list = sorted([(r, len(r)) for r in routes.keys()], key=lambda x: x[1])
+        route_list = [x[0] for x in route_list]
+        route_name = np.random.choice(route_list[:min(5, len(route_list))])
+    else: route_name = np.random.choice(list(routes.keys()))
+    route = routes[route_name]
+    node_idx = np.random.randint(0, len(route)-1)
+    M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
+    return M
 
 def select_candidate_points_ML(model, routes, distance_matrix, 
                                truck_capacity, all_customers,
@@ -224,10 +248,15 @@ def select_candidate_points_ML(model, routes, distance_matrix,
     customers_ts = pt.from_numpy(customers).to(device)
     with pt.no_grad():
         predict_cost_reductions = model(candidates_ts, customers_ts).squeeze(axis=1).cpu().detach().numpy()
-    candidates_with_cost = []
-    for (route_name, node_idx), cost in zip(all_candidates, predict_cost_reductions):
-        candidates_with_cost.append((cost, (route_name, node_idx)))
-    sorted_candidates = sorted(candidates_with_cost, key=lambda x: x[0], reverse=True)
-    route_name, node_idx = sorted_candidates[0][1]
+    # candidates_with_cost = []
+    # for (route_name, node_idx), cost in zip(all_candidates, predict_cost_reductions):
+    #     candidates_with_cost.append((cost, (route_name, node_idx)))
+    # sorted_candidates = sorted(candidates_with_cost, key=lambda x: x[0], reverse=True)
+    # idx = np.random.randint(0, min(50, len(sorted_candidates)))
+    min_cost, max_cost = np.min(predict_cost_reductions), np.max(predict_cost_reductions)
+    norm_cost = [(x-min_cost)/max_cost for x in predict_cost_reductions]
+    probs = [c/np.sum(norm_cost) for c in norm_cost]
+    i = np.random.choice(list(range(len(all_candidates))), p=probs)
+    route_name, node_idx = all_candidates[i]
     M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
     return M

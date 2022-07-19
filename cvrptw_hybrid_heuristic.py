@@ -11,7 +11,8 @@ from cvrptw import read_input_cvrptw, compute_cost_from_routes
 import tools
 from solver import solve_static_vrptw
 from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check
-from candidate_predictor_features import depot
+from cvrptw_utility import depot, device, MLP_Model
+import torch
 
 
 def construct_solution_from_ge_solver(instance, seed=1, tmp_dir='tmp', time_limit=240):
@@ -49,11 +50,16 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
             cur_routes[path_name] = [f"Customer_{c}" for c in route]
     print(f"Round: {exp_round}, init cost {total_cost}")
     cost_list = []
+    max_distance = np.max(distance_matrix)
+    saved_ck = torch.load('model.pt', map_location=device)
+    model = MLP_Model().to(device)
+    model.load_state_dict(saved_ck["model_state_dict"])
+
     for i in range(num_episodes):
         cur_routes, total_cost, _ = heuristic_improvement(cur_routes, all_customers, truck_capacity, 
                                                           demands_dict, service_time_dict, 
                                                           earliest_start_dict, latest_end_dict,
-                                                          distance_matrix_dict)
+                                                          distance_matrix_dict, model=model, max_distance=max_distance)
         print(f"Round: {exp_round}, fine tune {i}, total cost: {total_cost}")
         cost_list.append(total_cost)
         res_dict[exp_round] = (total_cost, cur_routes)
