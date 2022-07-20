@@ -2,6 +2,7 @@ from dataclasses import replace
 from platform import node
 from select import select
 import numpy as np
+import math
 import pandas as pd
 from pulp import *
 import sys
@@ -121,17 +122,10 @@ def compute_route_cost(routes, distance_matrix):
     return total_cost
 
 
-def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, service_time, 
-                          earliest_start, latest_end,
-                          distance_matrix, only_short_routes=False, model=None, max_distance=0):
+def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity, demands, service_time, 
+                                          earliest_start, latest_end,
+                                          distance_matrix):
     ori_total_cost = compute_route_cost(cur_routes, distance_matrix)
-    # customers = select_candidate_points(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
-    customers = select_candidate_points_ML(model, cur_routes, distance_matrix, 
-                                           truck_capacity, all_customers,
-                                           demands, service_time,
-                                           earliest_start, latest_end,
-                                           max_distance)
-    print(customers)
     routes_before_insert = {}
     # print("ori routes: ", cur_routes)
     for route_name, route in cur_routes.items():
@@ -183,14 +177,32 @@ def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, se
         if valid_insertion and total_cost_increase < min_total_cost_increase:
             min_total_cost_increase = total_cost_increase
             new_routes_after_insertion = {route_name: route[:] for route_name, route in routes_after_insertion.items()}
-    if min_total_cost_increase + total_cost_before_insert < ori_total_cost:
+    new_route_cost = min_total_cost_increase + total_cost_before_insert
+    if new_route_cost < ori_total_cost:
         new_routes = {}
         for route_name, route in routes_before_insert.items():
             if route_name in new_routes_after_insertion: new_routes[route_name] = new_routes_after_insertion[route_name]
             else: new_routes[route_name] = route
-        ori_total_cost = min_total_cost_increase + total_cost_before_insert
     else: new_routes = cur_routes
+    cost_reduction = (-10.0 if math.isinf(new_route_cost) else ori_total_cost-new_route_cost)
+    return new_routes, ori_total_cost, cost_reduction
+
+
+def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, service_time, 
+                          earliest_start, latest_end,
+                          distance_matrix, only_short_routes=False, model=None, max_distance=0):
+    # customers = select_candidate_points(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
+    customers = select_candidate_points_ML(model, cur_routes, distance_matrix, 
+                                           truck_capacity, all_customers,
+                                           demands, service_time,
+                                           earliest_start, latest_end,
+                                           max_distance)
+    new_routes, ori_total_cost, _ = heuristic_improvement_with_candidates(cur_routes, customers, 
+                                                                         truck_capacity, demands, service_time, 
+                                                                         earliest_start, latest_end,
+                                                                         distance_matrix)
     return new_routes, ori_total_cost, customers
+
 
 def get_problem_dict(nb_customers,
                      demands, service_time, 

@@ -1,22 +1,25 @@
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
+import torch as pt
+import math
+from nn_builder.pytorch.NN import NN
 
 
+route_output_dim = 128
+max_num_route = 30
+max_num_nodes_per_route = 20
 depot = "Customer_0"
 feature_dim = 9 # (dist_to_prev_node, dist_to_next_node, service_time, earlieast_time, latest_time, arrival_time, demand, remaining_capacity, dist_to_depot)
 selected_nodes_num = 800
 
 
-def extract_features_for_nodes(node, node_to_route_dict, cur_routes,
-                               truck_capacity, 
+def extract_features_for_nodes(node, route, truck_capacity, 
                                demands, service_time,
                                earliest_start, latest_end,
                                distance_matrix, max_distance):
     node_feature = np.zeros(feature_dim)
     if node == depot: return node_feature
     
-    route_name = node_to_route_dict[node]
-    route = cur_routes[route_name]
     max_duration = latest_end[depot]
     max_service_time = np.max(list(service_time.values()))
     
@@ -47,12 +50,12 @@ def get_candidate_feateures(candidates, node_to_route_dict,
                             earliest_start, latest_end,
                             distance_matrix, max_distance):
     candidates_feature = np.zeros((2, feature_dim))
-    candidates_feature[0, :] = extract_features_for_nodes(candidates[0], node_to_route_dict, cur_routes,
+    candidates_feature[0, :] = extract_features_for_nodes(candidates[0], node_to_route_dict[candidates[0]],
                                                     truck_capacity, demands, service_time,
                                                     earliest_start, latest_end,
                                                     distance_matrix, max_distance)
     if len(candidates) > 1:
-        candidates_feature[1, :] = extract_features_for_nodes(candidates[1], node_to_route_dict, cur_routes,
+        candidates_feature[1, :] = extract_features_for_nodes(candidates[1], node_to_route_dict[candidates[1]],
                                                         truck_capacity, demands, service_time,
                                                         earliest_start, latest_end,
                                                         distance_matrix, max_distance)
@@ -99,14 +102,7 @@ def map_node_to_route(cur_routes):
         for c in route: node_to_route_dict[c] = route_name
     return node_to_route_dict
 
-import torch as pt
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import math
 
-route_output_dim = 128
-max_num_route = 30
-max_num_nodes_per_route = 2
 
 if pt.cuda.is_available(): device = "cuda:0"
 else: device = "cpu"
@@ -118,8 +114,29 @@ class Route_Model(pt.nn.Module):
     
     def forward(self, x):
         x = x.reshape(max_num_nodes_per_route, -1, feature_dim)
-        h = pt.torch.zeros(8, x.size(1), route_output_dim).to(device)
+        h = pt.torch.ones(8, x.size(1), route_output_dim).to(device)
         return self.rnn(x, h)
+
+
+class Route_MLP_Model(pt.nn.Module):
+    def __init__(self):
+        super(Route_MLP_Model, self).__init__()
+        # self.mlp = NN(input_dim=max_num_nodes_per_route*feature_dim, 
+        #              layers_info=[256, 128, route_output_dim],
+        #              output_activation="tanh",
+        #              hidden_activations="tanh", initialiser="Xavier")
+        self.fc1 = pt.nn.Linear(max_num_nodes_per_route*feature_dim, 256)
+        self.fc2 = pt.nn.Linear(256, 128)
+        self.fc3 = pt.nn.Linear(128, route_output_dim)
+        pt.nn.init.xavier_uniform_(self.fc1.weight)
+        pt.nn.init.xavier_uniform_(self.fc2.weight)
+        pt.nn.init.xavier_uniform_(self.fc3.weight)
+    
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
+        return x
 
 
 class MLP_Model(pt.nn.Module):
@@ -149,15 +166,48 @@ class MLP_Model(pt.nn.Module):
         dout = pt.tanh(self.fc2(dout))
         return self.fc3(dout)
     
+    
+class MLP_RL_Model(pt.nn.Module):
+    def __init__(self, hyperparameters):
+        super(MLP_RL_Model, self).__init__()
+        self.route_model = Route_Model()
+        if hyperparameters["final_layer_activation"] == "Softmax": self.final_layer = pt.nn.Softmax(dim=1)
+        else: self.final_layer = None
+        self.mlp = NN(input_dim=route_output_dim*2, 
+                        layers_info=hyperparameters["linear_hidden_units"] + [hyperparameters["output_dim"]],
+                        output_activation=None,
+                        batch_norm=hyperparameters["batch_norm"], dropout=hyperparameters["dropout"],
+                        hidden_activations=hyperparameters["hidden_activations"], initialiser=hyperparameters["initialiser"],
+                        columns_of_data_to_be_embedded=hyperparameters["columns_of_data_to_be_embedded"],
+                        embedding_dimensions=hyperparameters["embedding_dimensions"], y_range=hyperparameters["y_range"],
+                        random_seed=hyperparameters["seed"])
+
+    def forward(self, state):
+        state = state.reshape(-1, max_num_route+1, max_num_nodes_per_route*feature_dim)
+        route_rnn_output_list = []
+        x_cr, _ = self.route_model(state[:, 0, :])
+        x_cr = x_cr[-1, :, :]
+        customers = state[:, 1:, :]
+        for i in range(max_num_route):
+            x_r = customers[:, i, :]
+            x_r, _ = self.route_model(x_r)
+            x_r = x_r[-1, :, :]
+            route_rnn_output_list.append(x_r)
+        x_r = pt.torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
+        x = pt.torch.cat((x_cr, x_r), axis=1)
+        x = self.mlp(x)
+        if self.final_layer is not None:
+            x = self.final_layer(x)
+        return x
+    
+    
 def acc_mrse_compute(pred, label):
     pred = pred.cpu().data.numpy()
     label = label.cpu().data.numpy()
     return math.sqrt(np.mean((pred-label)**2))
 
-def transform_data(candidate_features, customer_features, costs):
-    labels = costs.astype(np.float32)
-    num_samples = len(costs)
-    candidates = candidate_features.reshape(num_samples, -1).astype(np.float32)
+
+def transform_customers_data(num_samples, customer_features):
     customers = np.zeros((num_samples, max_num_route, max_num_nodes_per_route*feature_dim))
     customer_features = customer_features.reshape(num_samples, -1)
     for i in range(num_samples):
@@ -174,6 +224,14 @@ def transform_data(candidate_features, customer_features, costs):
                 customers[i, j, feature_dim*k:feature_dim*(k+1)] = all_routes_features[l:feature_dim:(l+1)*feature_dim]
                 k += 1
     customers = customers.astype(np.float32)
+    return customers
+
+
+def transform_data(candidate_features, customer_features, costs):
+    labels = costs.astype(np.float32)
+    num_samples = len(costs)
+    candidates = candidate_features.reshape(num_samples, -1).astype(np.float32)
+    customers = transform_customers_data(num_samples, customer_features)
     return candidates, customers, labels
 
 class VRPTWDataset(Dataset):
@@ -186,8 +244,7 @@ class VRPTWDataset(Dataset):
     def __getitem__(self, idx):
         return self.candidates[idx, :], self.customers[idx, :, :], self.labels[idx]
 
-def extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers):
-    route = routes[route_name]
+def extend_candidate_points(route, node_idx, distance_matrix, all_customers):
     if len(route) <= 2: 
         M = route[:]
         if len(M) <= 1: M.append(depot)
@@ -195,7 +252,7 @@ def extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_c
     else:
         M = route[node_idx:node_idx+2]
         prev_node = (depot if node_idx == 0 else route[node_idx-1])
-        next_node = (depot if node_idx == len(route)-2 else route[node_idx+2])
+        next_node = (depot if node_idx >= len(route)-2 else route[node_idx+2])
     dist = [(c, distance_matrix[prev_node][c]+distance_matrix[c][next_node]) for c in all_customers if c not in route]
     dist = sorted(dist, key=lambda x: x[1])
     M.extend([dist[i][0] for i in range(min(4, len(dist)))])
@@ -209,8 +266,16 @@ def select_candidate_points(routes, distance_matrix, all_customers, only_short_r
     else: route_name = np.random.choice(list(routes.keys()))
     route = routes[route_name]
     node_idx = np.random.randint(0, len(route)-1)
-    M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
+    M = extend_candidate_points(route, node_idx, distance_matrix, all_customers)
     return M
+
+def random_choice(ll, probs):
+    r = np.random.random()
+    cp = 0
+    for i, p in enumerate(probs):
+        cp += p
+        if cp >= r: return ll[i]
+    return ll[-1]
 
 def select_candidate_points_ML(model, routes, distance_matrix, 
                                truck_capacity, all_customers,
@@ -254,9 +319,9 @@ def select_candidate_points_ML(model, routes, distance_matrix,
     # sorted_candidates = sorted(candidates_with_cost, key=lambda x: x[0], reverse=True)
     # idx = np.random.randint(0, min(50, len(sorted_candidates)))
     min_cost, max_cost = np.min(predict_cost_reductions), np.max(predict_cost_reductions)
-    norm_cost = [(x-min_cost)/max_cost for x in predict_cost_reductions]
+    norm_cost = [round((x-min_cost)/max_cost, 2) for x in predict_cost_reductions]
     probs = [c/np.sum(norm_cost) for c in norm_cost]
-    i = np.random.choice(list(range(len(all_candidates))), p=probs)
+    i = random_choice(list(range(len(all_candidates))), probs)
     route_name, node_idx = all_candidates[i]
     M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
     return M

@@ -3,3 +3,6 @@
 tmp
 predict_data
 amlt
+RL_train_data
+wandb
+logs
