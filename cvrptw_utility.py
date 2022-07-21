@@ -5,7 +5,7 @@ import math
 from nn_builder.pytorch.NN import NN
 
 
-route_output_dim = 128
+route_output_dim = 64
 max_num_route = 40
 max_num_nodes_per_route = 20
 depot = "Customer_0"
@@ -110,11 +110,12 @@ else: device = "cpu"
 class Route_Model(pt.nn.Module):
     def __init__(self):
         super(Route_Model, self).__init__()
-        self.rnn = pt.nn.GRU(feature_dim, route_output_dim, 8)
+        self.num_hidden = 4
+        self.rnn = pt.nn.GRU(feature_dim, route_output_dim, self.num_hidden)
     
     def forward(self, x):
         x = x.reshape(max_num_nodes_per_route, -1, feature_dim)
-        h = pt.torch.ones(8, x.size(1), route_output_dim).to(device)
+        h = pt.torch.ones(self.num_hidden, x.size(1), route_output_dim).to(device)
         return self.rnn(x, h)
 
 

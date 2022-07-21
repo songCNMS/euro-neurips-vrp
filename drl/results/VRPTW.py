@@ -57,7 +57,7 @@ config.overwrite_existing_results_file = False
 config.randomise_random_seed = True
 config.save_model = False
 config.generate_trajectory_warmup_rounds = args.warmup
-config.debug_mode = True
+config.debug_mode = False
 
 config.hyperparameters = {
     "DQN_Agents": {
