@@ -68,7 +68,7 @@ def train_model(model, optimizer, lossfunc, dataset, output_dir, eval_dataset=No
                 
                 
 def get_features(problem_file, exp_round, output_dir, solo=True):
-    problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
+    problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
     file_name = f"{output_dir}/predict_data/{problem_name}_{exp_round}"
     if os.path.exists(file_name+".candidates"):
         candidate_features = np.load(file_name+".candidates")
@@ -111,8 +111,12 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
     
     num_episodes = 1000
     early_stop_rounds = 10
-    if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
-    else: init_routes, total_cost = None, None
+    init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=240)
+    if init_routes is not None:
+        solution_file_name = f"./cvrp_benchmarks/RL_train_data/{problem_name}.npy"
+        np.save(solution_file_name, np.array(init_routes))
+    # if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
+    # else: init_routes, total_cost = None, None
     if init_routes is None:
         np.random.seed(exp_round)
         cur_routes, total_cost, _, _, _ = \
@@ -124,7 +128,6 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
         for i, route in enumerate(init_routes):
             path_name = f"PATH{i}"
             cur_routes[path_name] = [f"Customer_{c}" for c in route]
-    
     cost_list = [total_cost]
     candidate_features_list = []
     customer_features_list = []
@@ -253,7 +256,7 @@ if __name__ == '__main__':
             proc = get_features(problem_file, exp_round, is_solo)
     else:
         exp_name = datetime.now().strftime("%m%d-%H%M")
-        wandb.init(dir=f"{output_dir}/wandb", project="VRPTW", config={}, name=exp_name)
+        wandb.init(dir=f"{output_dir}/", project="VRPTW", config={}, name=exp_name)
         input_dim = feature_dim*(selected_nodes_num+2)
         # loss func and optim
         model = MLP_Model().to(device)

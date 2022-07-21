@@ -27,11 +27,11 @@ class VRPTW_Environment(gym.Env):
         self.early_stop_steps = 10
         self.steps_not_improved = 0
         self.trials = 10
-        self.reward_threshold = np.float("inf")
+        self.reward_threshold = float("inf")
         self.id = "VRPTW"
         self.num_states = (max_num_nodes_per_route+selected_nodes_num)*feature_dim
         self.observation_space = spaces.Box(
-            low=0.00, high=1.00, shape=(self.num_states,), dtype=np.float32
+            low=0.00, high=1.00, shape=(self.num_states,), dtype=float
         )
         self.action_space = spaces.Discrete(max_num_nodes_per_route)
         self.cur_route_name = "PATH_0"
@@ -45,8 +45,8 @@ class VRPTW_Environment(gym.Env):
         if problem_file is None:
             problem_list = os.listdir(dir_name)
             problem_file = np.random.choice(problem_list)
-        self.problem_name = problem_file
-        self.problem_file = f"{dir_name}/{self.problem_name}"
+        self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
+        self.problem_file = f"{dir_name}/{problem_file}"
         if self.instance != 'ortec':
             self.problem = tools.read_solomon(self.problem_file)
         else:
@@ -108,19 +108,20 @@ class VRPTW_Environment(gym.Env):
         return route_state
             
     def get_state(self):
-        route = self.cur_routes[self.cur_route_name]
+        route = self.cur_routes.get(self.cur_route_name, [])
         cur_route_state = self.get_route_state(route)
         
         cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
         cur_routes_encode_state[0, :] = cur_route_state
         for i, route_name in enumerate(self.route_name_list):
+            if route_name not in self.cur_routes: continue
             route = self.cur_routes[route_name]
             cur_routes_encode_state[i+1, :] = self.get_route_state(route)
         return cur_routes_encode_state
         
     def step(self, action):
         node_idx = action
-        route = self.cur_routes[self.cur_route_name]
+        route = self.cur_routes.get(self.cur_route_name, [])
         self.cur_step += 1
         self.steps_not_improved += 1
         self.done = False
