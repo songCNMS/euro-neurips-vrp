@@ -8,6 +8,7 @@ from utilities.data_structures.Replay_Buffer import Replay_Buffer
 from agents.actor_critic_agents.SAC import SAC
 from utilities.Utility_Functions import create_actor_distribution
 from cvrptw_utility import MLP_RL_Model
+import wandb
 
 torch.autograd.set_detect_anomaly(False)
 
@@ -134,6 +135,7 @@ class SAC_Discrete(SAC):
         print("----------------------------")
         print("Episode score {} ".format(self.total_episode_score_so_far))
         total_reward = self.eval()
+        wandb.log({"cost_reduction": total_reward})
         self.eval_reward_list.append(total_reward)
         print("Eval reward {}, best reward {} ".format(total_reward, np.max(self.eval_reward_list)))
         print("History rewards: ", self.eval_reward_list)

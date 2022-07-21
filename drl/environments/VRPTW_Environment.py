@@ -70,13 +70,15 @@ class VRPTW_Environment(gym.Env):
                                    earliest_start, latest_end, max_horizon, 
                                    distance_warehouses, distance_matrix)
         if routes is None:
-            if os.path.exists(f"RL_train_data/{self.problem_name}.npy"): _routes = np.load(f"RL_train_data/{self.problem_name}.npy", allow_pickle=True)
+            solution_file_name = f"{self.data_dir}/cvrp_benchmarks/RL_train_data/{self.problem_name}.npy"
+            tmp_file_name =  f'tmp/{self.problem_name}'
+            if os.path.exists(solution_file_name): _routes = np.load(solution_file_name, allow_pickle=True)
             else:
-                if os.path.exists(f'tmp/{self.problem_name}'):
-                    os.rmdir(f"tmp/{self.problem_name}")
-                os.makedirs(f"tmp/{self.problem_name}", exist_ok=True)
-                _routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=f"tmp/{self.problem_name}", time_limit=240)
-                np.save(f"RL_train_data/{self.problem_name}.npy", np.array(_routes))
+                if os.path.exists(tmp_file_name):
+                    os.rmdir(tmp_file_name)
+                os.makedirs(tmp_file_name, exist_ok=True)
+                _routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=tmp_file_name, time_limit=240)
+                np.save(solution_file_name, np.array(_routes))
             routes = {}
             for i, route in enumerate(_routes):
                 path_name = f"PATH{i}"
@@ -87,7 +89,7 @@ class VRPTW_Environment(gym.Env):
         self.cur_route_name = self.route_name_list[self.cur_route_idx]
             
     def reset(self, problem_file=None, routes=None, cur_route=None):
-        # self.load_problem("ORTEC-VRPTW-ASYM-8b1620d9-d1-n346-k25.txt", routes, cur_route)
+        # self.load_problem("ORTEC-VRPTW-ASYM-50d1f78d-d1-n329-k19.txt", routes, cur_route)
         self.load_problem(problem_file, routes, cur_route)
         self.steps_not_improved = 0
         self.cur_step = 0

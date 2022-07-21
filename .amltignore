@@ -9,4 +9,3 @@ predict_data__
 amlt
 .vscode
 *.pt
-RL_train_data

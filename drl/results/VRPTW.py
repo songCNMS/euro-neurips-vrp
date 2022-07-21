@@ -17,10 +17,13 @@ from utilities.data_structures.Config import Config
 from environments.VRPTW_Environment import VRPTW_Environment
 from cvrptw_utility import device
 
-
-import os
 import random
 import argparse
+import wandb
+import os
+os.environ["WANDB_API_KEY"] = "116a4f287fd4fbaa6f790a50d2dd7f97ceae4a03"
+wandb.login()
+
 parser = argparse.ArgumentParser(description='Input of VRPTW Trainer')
 parser.add_argument('--cuda', metavar='C', type=int, help='CUDA Device ID')
 parser.add_argument('--warmup', type=int, help='warm up rounds before training')
@@ -36,11 +39,12 @@ if args.remote:
 else:
     config.data_dir = "./"
     config.output_dir = "./logs/"
+    
 config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
 config.log_path = config.output_dir
 config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
 config.file_to_save_results_graph = f"{config.log_path}/VRPTW.png"
-config.use_GPU = False
+config.use_GPU = True
 if config.use_GPU: config.device = device
 else: config.device = "cpu"
 config.num_episodes_to_run = 10000
@@ -132,32 +136,36 @@ config.hyperparameters = {
             "hidden_activations": "tanh",
             "final_layer_activation": None,
             "batch_norm": False,
-            "buffer_size": 1000000,
+            "buffer_size": 100000,
             "tau": 0.01,
             "gradient_clipping_norm": 1.0,
             "initialiser": "Xavier"
         },
 
         "min_steps_before_learning": 5120,
-        "batch_size": 256,
+        "batch_size": 128,
         "discount_rate": 0.99,
         "mu": 0.0, #for O-H noise
         "theta": 0.15, #for O-H noise
         "sigma": 0.25, #for O-H noise
         "action_noise_std": 0.2,  # for TD3
         "action_noise_clipping_range": 0.5,  # for TD3
-        "update_every_n_steps": 1,
-        "learning_updates_per_learning_session": 8,
-        "automatically_tune_entropy_hyperparameter": False,
+        "update_every_n_steps": 16, # how frequency learn is run
+        "learning_updates_per_learning_session": 32, # how many iterations per learn
+        "automatically_tune_entropy_hyperparameter": True,
         "entropy_term_weight": 1.0,
         "add_extra_noise": False,
         "do_evaluation_iterations": True
     }
 }
+from datetime import datetime
+import platform
 
 if __name__ == "__main__":
     # AGENTS = [SAC_Discrete, DDQN, Dueling_DDQN, DQN, DQN_With_Fixed_Q_Targets,
     #           DDQN_With_Prioritised_Experience_Replay, A2C, PPO, A3C ]
+    exp_name = datetime.now().strftime("%m%d-%H%M")
+    wandb.init(dir=f"{config.output_dir}/wandb", project="VRPTW_SAC", config={}, name=f"SAC_{exp_name}", group=f"{platform.node()}")
     AGENTS = [SAC_Discrete]
     trainer = Trainer(config, AGENTS)
     trainer.run_games_for_agents()
