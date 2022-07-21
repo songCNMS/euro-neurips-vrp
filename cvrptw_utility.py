@@ -6,11 +6,11 @@ from nn_builder.pytorch.NN import NN
 
 
 route_output_dim = 128
-max_num_route = 30
+max_num_route = 40
 max_num_nodes_per_route = 20
 depot = "Customer_0"
 feature_dim = 9 # (dist_to_prev_node, dist_to_next_node, service_time, earlieast_time, latest_time, arrival_time, demand, remaining_capacity, dist_to_depot)
-selected_nodes_num = 800
+selected_nodes_num = 900
 
 
 def extract_features_for_nodes(node, route, truck_capacity, 

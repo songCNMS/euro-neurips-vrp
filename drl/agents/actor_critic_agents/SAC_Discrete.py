@@ -52,6 +52,8 @@ class SAC_Discrete(SAC):
         assert not self.hyperparameters["add_extra_noise"], "There is no add extra noise option for the discrete version of SAC at moment"
         self.add_extra_noise = False
         self.do_evaluation_iterations = self.hyperparameters["do_evaluation_iterations"]
+        self.eval_reward_list = []
+        
 
     def produce_action_and_action_info(self, state):
         """Given the state, produces an action, the probability of the action, the log probability of the action, and

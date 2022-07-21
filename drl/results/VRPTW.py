@@ -44,7 +44,7 @@ config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=conf
 config.log_path = config.output_dir
 config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
 config.file_to_save_results_graph = f"{config.log_path}/VRPTW.png"
-config.use_GPU = False
+config.use_GPU = True
 if config.use_GPU: config.device = device
 else: config.device = "cpu"
 config.num_episodes_to_run = 10000
@@ -142,16 +142,16 @@ config.hyperparameters = {
             "initialiser": "Xavier"
         },
 
-        "min_steps_before_learning": 512000000,
-        "batch_size": 128,
+        "min_steps_before_learning": 5120,
+        "batch_size": 256,
         "discount_rate": 0.99,
         "mu": 0.0, #for O-H noise
         "theta": 0.15, #for O-H noise
         "sigma": 0.25, #for O-H noise
         "action_noise_std": 0.2,  # for TD3
         "action_noise_clipping_range": 0.5,  # for TD3
-        "update_every_n_steps": 16, # how frequency learn is run
-        "learning_updates_per_learning_session": 32, # how many iterations per learn
+        "update_every_n_steps": 2, # how frequency learn is run
+        "learning_updates_per_learning_session": 8, # how many iterations per learn
         "automatically_tune_entropy_hyperparameter": True,
         "entropy_term_weight": 1.0,
         "add_extra_noise": False,
