@@ -58,6 +58,7 @@ def extract_features_from_candidates(candidates, node_to_route_dict,
     i = 0
     for _, route in cur_routes.items():
         i += 1
+        if i + 1 >= selected_nodes_num: break
         for c in route:
             customers_features[0, i*feature_dim:(i+1)*feature_dim]\
                                         = extract_features_for_nodes(c, node_to_route_dict, cur_routes,

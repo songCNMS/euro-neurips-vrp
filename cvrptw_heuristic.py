@@ -191,12 +191,12 @@ def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity,
 def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, service_time, 
                           earliest_start, latest_end,
                           distance_matrix, only_short_routes=False, model=None, max_distance=0):
-    # customers = select_candidate_points(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
-    customers = select_candidate_points_ML(model, cur_routes, distance_matrix, 
-                                           truck_capacity, all_customers,
-                                           demands, service_time,
-                                           earliest_start, latest_end,
-                                           max_distance)
+    customers = select_candidate_points(cur_routes, distance_matrix, all_customers, only_short_routes=only_short_routes)
+    # customers = select_candidate_points_ML(model, cur_routes, distance_matrix, 
+    #                                        truck_capacity, all_customers,
+    #                                        demands, service_time,
+    #                                        earliest_start, latest_end,
+    #                                        max_distance)
     new_routes, ori_total_cost, _ = heuristic_improvement_with_candidates(cur_routes, customers, 
                                                                          truck_capacity, demands, service_time, 
                                                                          earliest_start, latest_end,

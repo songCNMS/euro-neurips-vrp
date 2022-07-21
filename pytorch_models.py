@@ -109,12 +109,9 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
                                                     earliest_start, latest_end, max_horizon,
                                                     distance_warehouses, distance_matrix)
     
-    num_episodes = 1000
+    num_episodes = 10
     early_stop_rounds = 10
-    init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=240)
-    if init_routes is not None:
-        solution_file_name = f"./cvrp_benchmarks/RL_train_data/{problem_name}.npy"
-        np.save(solution_file_name, np.array(init_routes))
+    init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
     # if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
     # else: init_routes, total_cost = None, None
     if init_routes is None:
@@ -123,11 +120,15 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
                                 generate_init_solution(nb_customers, truck_capacity, demands, service_time,
                                                        earliest_start, latest_end, max_horizon,
                                                        distance_warehouses, distance_matrix)
+        init_routes = []
+        for route in cur_routes.values(): init_routes.append([int(c.split('_')[-1])-1 for c in route])
     else:
         cur_routes = {}
         for i, route in enumerate(init_routes):
             path_name = f"PATH{i}"
             cur_routes[path_name] = [f"Customer_{c}" for c in route]
+    solution_file_name = f"./cvrp_benchmarks/RL_train_data/{problem_name}.npy"
+    np.save(solution_file_name, np.array(init_routes))
     cost_list = [total_cost]
     candidate_features_list = []
     customer_features_list = []
