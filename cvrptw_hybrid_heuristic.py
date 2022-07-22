@@ -48,6 +48,7 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
         for i, route in enumerate(init_routes):
             path_name = f"PATH{i}"
             cur_routes[path_name] = [f"Customer_{c}" for c in route]
+        
     print(f"Round: {exp_round}, init cost {total_cost}")
     cost_list = []
     max_distance = np.max(distance_matrix)

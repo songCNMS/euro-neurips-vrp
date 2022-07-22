@@ -2,7 +2,7 @@ description: VRPTW_RL_SAC
 
 target:
   service: amlk8s
-  name: itplabrr1cl1
+  name: itplabrl1cl1
   vc: resrchvc
   # run "amlt target list amlk8s" to list the names of available AMLK8s targets
   # name: msrresrchvc
@@ -17,6 +17,7 @@ environment:
     - pip install pulp
     - pip install elkai
     - pip install wandb
+    - pip install nn_builder==0.0.12
     - cd baselines/hgs_vrptw; make all; cd ../..
 
 code:
@@ -31,6 +32,6 @@ data:
 # list of jobs to run, we run 2 jobs in this example
 jobs:
 - name: vrptw_ortec
-  sku: G2
+  sku: G1
   command:
   - python drl/results/VRPTW.py --remote

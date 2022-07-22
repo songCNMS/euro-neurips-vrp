@@ -115,6 +115,7 @@ class SAC_Discrete(SAC):
                 hyperparameters[key] = default_hyperparameter_choices[key]
         hyperparameters["input_dim"] = input_dim
         hyperparameters["output_dim"] = output_dim
+        hyperparameters["linear_route"] = self.config.linear_route
         return MLP_RL_Model(hyperparameters).to(self.device)
     
     def eval(self):

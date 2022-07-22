@@ -58,6 +58,7 @@ config.randomise_random_seed = True
 config.save_model = False
 config.generate_trajectory_warmup_rounds = args.warmup
 config.debug_mode = False
+config.linear_route = True
 
 config.hyperparameters = {
     "DQN_Agents": {
@@ -142,7 +143,7 @@ config.hyperparameters = {
             "initialiser": "Xavier"
         },
 
-        "min_steps_before_learning": 5120,
+        "min_steps_before_learning": 2560,
         "batch_size": 256,
         "discount_rate": 0.99,
         "mu": 0.0, #for O-H noise
@@ -150,8 +151,8 @@ config.hyperparameters = {
         "sigma": 0.25, #for O-H noise
         "action_noise_std": 0.2,  # for TD3
         "action_noise_clipping_range": 0.5,  # for TD3
-        "update_every_n_steps": 2, # how frequency learn is run
-        "learning_updates_per_learning_session": 8, # how many iterations per learn
+        "update_every_n_steps": 128, # how frequency learn is run
+        "learning_updates_per_learning_session": 32, # how many iterations per learn
         "automatically_tune_entropy_hyperparameter": True,
         "entropy_term_weight": 1.0,
         "add_extra_noise": False,
@@ -161,11 +162,12 @@ config.hyperparameters = {
 from datetime import datetime
 import platform
 
+
 if __name__ == "__main__":
     # AGENTS = [SAC_Discrete, DDQN, Dueling_DDQN, DQN, DQN_With_Fixed_Q_Targets,
     #           DDQN_With_Prioritised_Experience_Replay, A2C, PPO, A3C ]
     exp_name = datetime.now().strftime("%m%d-%H%M")
-    wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config={}, name=f"SAC_{exp_name}", group=f"{platform.node()}")
+    wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=f"SAC_{exp_name}", group=f"{platform.node()}")
     AGENTS = [SAC_Discrete]
     trainer = Trainer(config, AGENTS)
     trainer.run_games_for_agents()

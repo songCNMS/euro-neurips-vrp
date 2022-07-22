@@ -9,3 +9,6 @@ predict_data__
 amlt
 .vscode
 *.pt
+*.log
+*.ipynb
+*.txt

@@ -122,22 +122,13 @@ class Route_Model(pt.nn.Module):
 class Route_MLP_Model(pt.nn.Module):
     def __init__(self):
         super(Route_MLP_Model, self).__init__()
-        # self.mlp = NN(input_dim=max_num_nodes_per_route*feature_dim, 
-        #              layers_info=[256, 128, route_output_dim],
-        #              output_activation="tanh",
-        #              hidden_activations="tanh", initialiser="Xavier")
-        self.fc1 = pt.nn.Linear(max_num_nodes_per_route*feature_dim, 256)
-        self.fc2 = pt.nn.Linear(256, 128)
-        self.fc3 = pt.nn.Linear(128, route_output_dim)
-        pt.nn.init.xavier_uniform_(self.fc1.weight)
-        pt.nn.init.xavier_uniform_(self.fc2.weight)
-        pt.nn.init.xavier_uniform_(self.fc3.weight)
+        self.mlp = NN(input_dim=max_num_nodes_per_route*feature_dim, 
+                     layers_info=[256, 128, route_output_dim],
+                     output_activation="tanh",
+                     hidden_activations="tanh", initialiser="Xavier")
     
     def forward(self, x):
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        return x
+        return self.mlp(x)
 
 
 class MLP_Model(pt.nn.Module):
@@ -171,7 +162,9 @@ class MLP_Model(pt.nn.Module):
 class MLP_RL_Model(pt.nn.Module):
     def __init__(self, hyperparameters):
         super(MLP_RL_Model, self).__init__()
-        self.route_model = Route_Model()
+        self.mlp_route = hyperparameters["linear_route"]
+        if self.mlp_route: self.route_model = Route_MLP_Model()
+        else: self.route_model = Route_Model()
         if hyperparameters["final_layer_activation"] == "Softmax": self.final_layer = pt.nn.Softmax(dim=1)
         else: self.final_layer = None
         self.mlp = NN(input_dim=route_output_dim*2, 
@@ -186,13 +179,17 @@ class MLP_RL_Model(pt.nn.Module):
     def forward(self, state):
         state = state.reshape(-1, max_num_route+1, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
-        x_cr, _ = self.route_model(state[:, 0, :])
-        x_cr = x_cr[-1, :, :]
+        if self.mlp_route: x_cr = self.route_model(state[:, 0, :])
+        else:
+            x_cr, _ = self.route_model(state[:, 0, :])
+            x_cr = x_cr[-1, :, :]
         customers = state[:, 1:, :]
         for i in range(max_num_route):
             x_r = customers[:, i, :]
-            x_r, _ = self.route_model(x_r)
-            x_r = x_r[-1, :, :]
+            if self.mlp_route: x_r = self.route_model(x_r)
+            else:
+                x_r, _ = self.route_model(x_r)
+                x_r = x_r[-1, :, :]
             route_rnn_output_list.append(x_r)
         x_r = pt.torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
         x = pt.torch.cat((x_cr, x_r), axis=1)
