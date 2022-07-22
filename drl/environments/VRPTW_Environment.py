@@ -24,6 +24,7 @@ class VRPTW_Environment(gym.Env):
         self.reset()
         self.cur_step = 0
         self._max_episode_steps = 1000
+        self.max_episode_steps = 1000
         self.early_stop_steps = 10
         self.steps_not_improved = 0
         self.trials = 10
@@ -31,7 +32,7 @@ class VRPTW_Environment(gym.Env):
         self.id = "VRPTW"
         self.num_states = (max_num_nodes_per_route+selected_nodes_num)*feature_dim
         self.observation_space = spaces.Box(
-            low=0.00, high=1.00, shape=(self.num_states,), dtype=float
+            low=0.00, high=1.00, shape=(max_num_route+1, max_num_nodes_per_route*feature_dim), dtype=float
         )
         self.action_space = spaces.Discrete(max_num_nodes_per_route)
         self.cur_route_name = "PATH_0"

@@ -22,13 +22,14 @@ class Base_Agent(object):
         self.config = config
         self.set_random_seeds(config.seed)
         self.environment = config.environment
+        self.is_vec_env = config.is_vec_env
+        if config.eval_environment is None: self.eval_environment = self.environment
+        else: self.eval_environment = config.eval_environment
         self.environment_title = self.get_environment_title()
         self.action_types = "DISCRETE" if self.environment.action_space.dtype == np.int64 else "CONTINUOUS"
         self.action_size = int(self.get_action_size())
         self.config.action_size = self.action_size
-
         self.lowest_possible_episode_score = self.get_lowest_possible_episode_score()
-
         self.state_size =  int(self.get_state_size())
         self.hyperparameters = config.hyperparameters
         self.average_score_required_to_win = self.get_score_required_to_win()
@@ -54,7 +55,8 @@ class Base_Agent(object):
     def get_environment_title(self):
         """Extracts name of environment from it"""
         try:
-            name = self.environment.unwrapped.id
+            if self.is_vec_env: name = self.environment.envs[0].id
+            else: name = self.environment.unwrapped.id
         except AttributeError:
             try:
                 if str(self.environment.unwrapped)[1:11] == "FetchReach": return "FetchReach"
@@ -99,7 +101,9 @@ class Base_Agent(object):
         if self.environment_title in ["AntMaze", "Hopper", "Walker2d"]:
             print("Score required to win set to infinity therefore no learning rate annealing will happen")
             return float("inf")
-        try: return self.environment.unwrapped.reward_threshold
+        try: 
+            if self.is_vec_env: return self.environment.envs[0].reward_threshold
+            else: return self.environment.unwrapped.reward_threshold
         except AttributeError:
             try:
                 return self.environment.spec.reward_threshold
@@ -109,7 +113,9 @@ class Base_Agent(object):
     def get_trials(self):
         """Gets the number of trials to average a score over"""
         if self.environment_title in ["AntMaze", "FetchReach", "Hopper", "Walker2d", "CartPole"]: return 100
-        try: return self.environment.unwrapped.trials
+        try: 
+            if self.is_vec_env: return self.environment.envs[0].trials
+            else: return self.environment.unwrapped.trials
         except AttributeError: return self.environment.spec.trials
 
     def setup_logger(self):
@@ -198,8 +204,11 @@ class Base_Agent(object):
     def conduct_action(self, action):
         """Conducts an action in the environment"""
         self.next_state, self.reward, self.done, _ = self.environment.step(action)
-        self.total_episode_score_so_far += self.reward
-        if self.hyperparameters["clip_rewards"]: self.reward =  max(min(self.reward, 1.0), -1.0)
+        if self.is_vec_env: self.total_episode_score_so_far += np.mean(self.reward)
+        else: self.total_episode_score_so_far += self.reward
+        if self.hyperparameters["clip_rewards"]:
+            if self.is_vec_env: self.reward =  np.array([max(min(r, 1.0), -1.0) for r in self.reward])
+            else: self.reward =  max(min(self.reward, 1.0), -1.0)
 
 
     def save_and_print_result(self):

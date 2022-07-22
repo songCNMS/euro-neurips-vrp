@@ -119,17 +119,17 @@ class SAC_Discrete(SAC):
         return MLP_RL_Model(hyperparameters).to(self.device)
     
     def eval(self):
-        self.environment.switch_mode("eval")
+        self.eval_environment.switch_mode("eval")
         eval_rounds = 10
         total_reward = 0.0
         for _ in range(eval_rounds):
-            state = self.environment.reset()
+            state = self.eval_environment.reset()
             done = False
             while not done:
                 action = self.actor_pick_action(state=state, eval=True)
-                state, reward, done, _ = self.environment.step(action)
+                state, reward, done, _ = self.eval_environment.step(action)
                 total_reward += reward
-        self.environment.switch_mode("train")        
+        self.eval_environment.switch_mode("train")        
         return total_reward / eval_rounds
     
     def print_summary_of_latest_evaluation_episode(self):

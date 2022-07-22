@@ -16,6 +16,8 @@ from agents.DQN_agents.DQN_With_Fixed_Q_Targets import DQN_With_Fixed_Q_Targets
 from utilities.data_structures.Config import Config
 from environments.VRPTW_Environment import VRPTW_Environment
 from cvrptw_utility import device
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv
 
 import random
 import argparse
@@ -39,8 +41,16 @@ if args.remote:
 else:
     config.data_dir = "./"
     config.output_dir = "./logs/"
-    
-config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
+ 
+wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
+N_ENVS = 3
+vec_env = make_vec_env(
+    lambda: wrappable_env,
+    n_envs=N_ENVS,
+    vec_env_cls=DummyVecEnv
+)
+config.environment = vec_env
+config.eval_environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
 config.log_path = config.output_dir
 config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
 config.file_to_save_results_graph = f"{config.log_path}/VRPTW.png"
@@ -59,6 +69,8 @@ config.save_model = False
 config.generate_trajectory_warmup_rounds = args.warmup
 config.debug_mode = False
 config.linear_route = True
+config.is_vec_env = True
+
 
 config.hyperparameters = {
     "DQN_Agents": {

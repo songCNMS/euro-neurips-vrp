@@ -83,9 +83,11 @@ class SAC(Base_Agent):
         """Runs an episode on the game, saving the experience and running a learning step if appropriate"""
         eval_ep = (self.episode_number+1) % TRAINING_EPISODES_PER_EVAL_EPISODE == 0 and self.do_evaluation_iterations
         self.episode_step_number_val = 0
-        while not self.done:
+        _done = False
+        while not _done:
             self.episode_step_number_val += 1
-            self.action = self.pick_action(eval_ep)
+            if self.is_vec_env: self.action = np.array([self.pick_action(eval_ep, state=state) for i, state in enumerate(self.state)])
+            else: self.action = self.pick_action(eval_ep)
             self.conduct_action(self.action)
             # if eval_ep:
             #     print("state: ", self.environment.state)
@@ -93,10 +95,16 @@ class SAC(Base_Agent):
             if self.time_for_critic_and_actor_to_learn():
                 for _ in range(self.hyperparameters["learning_updates_per_learning_session"]):
                     self.learn()
-            mask = False if self.episode_step_number_val >= self.environment._max_episode_steps else self.done
-            if not eval_ep: self.save_experience(experience=(self.state, self.action, self.reward, self.next_state, mask))
+            if not self.is_vec_env:
+                mask = False if self.episode_step_number_val >= self.environment._max_episode_steps else self.done
+                if not eval_ep: self.save_experience(experience=(self.state, self.action, self.reward, self.next_state, mask))
+            else:
+                for i in range(self.environment.num_envs):
+                    mask = False if self.episode_step_number_val >= self.environment.envs[i].max_episode_steps else self.done[i]
+                    if not eval_ep: self.save_experience(experience=(self.state[i], self.action[i], self.reward[i], self.next_state[i], mask))
             self.state = self.next_state
             self.global_step_number += 1
+            _done = (np.any(self.done) if self.is_vec_env else self.done)
         print(self.total_episode_score_so_far)
         if eval_ep: 
             self.print_summary_of_latest_evaluation_episode()
@@ -228,36 +236,36 @@ class SAC(Base_Agent):
             self.alpha = self.log_alpha.exp()
 
     def eval(self):
-        n_agents = self.environment.n_agents
-        self.environment.switch_mode("eval")
+        n_agents = self.eval_environment.n_agents
+        self.eval_environment.switch_mode("eval")
         eval_rounds = 5
         total_reward = 0.0
         for _ in range(eval_rounds):
             for i in range(1, n_agents+1):
-                state = self.environment.reset(local_agent_idx=i, relative_start_day=self.environment.episode_duration_training)
+                state = self.eval_environment.reset(local_agent_idx=i, relative_start_day=self.eval_environment.episode_duration_training)
                 done = False
                 while not done:
                     action = self.actor_pick_action(state=state, eval=True)
-                    state, reward, done, _ = self.environment.step(action)
+                    state, reward, done, _ = self.eval_environment.step(action)
                     total_reward += reward
-                self.environment.local_env.tracker.render_sku(self.config.log_path, [self.environment.sku_name])
-        self.environment.switch_mode("train")        
+                self.eval_environment.local_env.tracker.render_sku(self.config.log_path, [self.eval_environment.sku_name])
+        self.eval_environment.switch_mode("train")        
         return total_reward / eval_rounds
 
     def joint_eval(self):
-        self.environment.switch_mode("eval")
+        self.eval_environment.switch_mode("eval")
         eval_rounds = 1
         total_reward = 0.0
         for _ in range(eval_rounds):
-            states = self.environment.joint_reset(relative_start_day=self.environment.episode_duration_training)
+            states = self.eval_environment.joint_reset(relative_start_day=self.eval_environment.episode_duration_training)
             done = False
             while not done:
                 actions = np.array([self.actor_pick_action(state=state, eval=True)[0] for state in states])
-                states, rewards, dones, _ = self.environment.joint_step(actions)
+                states, rewards, dones, _ = self.eval_environment.joint_step(actions)
                 total_reward += np.sum(rewards)
                 done = dones[0]
-            self.environment.joint_env.tracker.render_sku(self.config.log_path, self.environment.joint_env.sku_names)
-        self.environment.switch_mode("train")        
+            self.eval_environment.joint_env.tracker.render_sku(self.config.log_path, self.eval_environment.joint_env.sku_names)
+        self.eval_environment.switch_mode("train")        
         return total_reward / eval_rounds
 
     def generate_C_trajectory(self):
