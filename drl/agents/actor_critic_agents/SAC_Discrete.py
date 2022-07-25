@@ -126,7 +126,7 @@ class SAC_Discrete(SAC):
         problem_list = os.listdir(dir_name)
         problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) > 450]
         eval_rounds = len(problem_list)
-        for problem in range(problem_list):
+        for problem in problem_list:
             state = self.eval_environment.reset(problem_file=problem)
             done = False
             while not done:
