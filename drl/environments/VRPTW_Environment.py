@@ -5,9 +5,9 @@ import gym
 import numpy as np
 from gym import spaces
 from gym.utils import seeding
-from cvrptw import read_input_cvrptw
+from cvrptw import read_input_cvrptw, compute_cost_from_routes
 import tools
-from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check, heuristic_improvement_with_candidates
+from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check, heuristic_improvement_with_candidates, compute_route_cost
 from cvrptw_utility import device, feature_dim, max_num_nodes_per_route, max_num_route, route_output_dim, selected_nodes_num, extract_features_for_nodes, extend_candidate_points
 from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
 
@@ -85,6 +85,7 @@ class VRPTW_Environment(gym.Env):
                 path_name = f"PATH{i}"
                 routes[path_name] = [f"Customer_{c}" for c in route]
         self.cur_routes = routes
+        self.init_total_cost = self.get_route_cost()
         self.route_name_list = sorted(list(self.cur_routes.keys()))
         self.cur_route_idx = 0
         self.cur_route_name = self.route_name_list[self.cur_route_idx]
@@ -96,6 +97,10 @@ class VRPTW_Environment(gym.Env):
         self.cur_step = 0
         self.state = self.get_state()
         return np.copy(self.state)
+
+
+    def get_route_cost(self):
+        return compute_route_cost(self.cur_routes, self.distance_matrix_dict)
     
     def get_route_state(self, route):
         route_state = np.zeros(max_num_nodes_per_route*feature_dim)

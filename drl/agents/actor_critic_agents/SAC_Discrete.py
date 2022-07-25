@@ -126,23 +126,28 @@ class SAC_Discrete(SAC):
         problem_list = os.listdir(dir_name)
         problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) > 450]
         eval_rounds = len(problem_list)
+        init_cost, final_cost = 0.0, 0.0
         for problem in problem_list:
             state = self.eval_environment.reset(problem_file=problem)
+            init_cost += self.eval_environment.init_total_cost
             done = False
             while not done:
                 action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
                 total_reward += reward
+            final_cost += self.eval_environment.get_route_cost()
         self.eval_environment.switch_mode("train")    
-        return total_reward / eval_rounds
+        return total_reward/eval_rounds, init_cost/eval_rounds, final_cost/eval_rounds
     
     def print_summary_of_latest_evaluation_episode(self):
         """Prints a summary of the latest episode"""
         print(" ")
         print("----------------------------")
         print("Episode score {} ".format(self.total_episode_score_so_far))
-        total_reward = self.eval()
-        wandb.log({"cost_reduction": total_reward})
+        total_reward, init_cost, final_cost = self.eval()
+        wandb.log({"cost_reduction": total_reward,
+                   "init_cost": init_cost,
+                   "final_cost": final_cost})
         self.eval_reward_list.append(total_reward)
         print("Eval reward {}, best reward {} ".format(total_reward, np.max(self.eval_reward_list)))
         print("History rewards: ", self.eval_reward_list)
