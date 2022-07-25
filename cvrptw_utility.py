@@ -5,7 +5,7 @@ import math
 from nn_builder.pytorch.NN import NN
 
 
-route_output_dim = 64
+route_output_dim = 128
 max_num_route = 40
 max_num_nodes_per_route = 20
 depot = "Customer_0"
@@ -115,7 +115,7 @@ class Route_Model(pt.nn.Module):
     
     def forward(self, x):
         x = x.reshape(max_num_nodes_per_route, -1, feature_dim)
-        h = pt.torch.ones(self.num_hidden, x.size(1), route_output_dim).to(device)
+        h = pt.torch.zeros(self.num_hidden, x.size(1), route_output_dim).to(device)
         return self.rnn(x, h)
 
 
@@ -153,8 +153,9 @@ class MLP_Model(pt.nn.Module):
             x_r = x_r[-1, :, :]
             route_rnn_output_list.append(x_r)
         x_r = pt.torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
+        x_r = self.dropout(self.x_r)
         x = pt.torch.cat((x_r, x_c), axis=1)
-        dout = pt.tanh(self.dropout(self.fc1(x)))
+        dout = pt.tanh(self.fc1(x))
         dout = pt.tanh(self.fc2(dout))
         return self.fc3(dout)
     
@@ -177,7 +178,8 @@ class MLP_RL_Model(pt.nn.Module):
                         random_seed=hyperparameters["seed"])
 
     def forward(self, state):
-        state = state.reshape(-1, max_num_route+1, max_num_nodes_per_route*feature_dim)
+        num_samples = state.size(0)
+        state = state.reshape(num_samples, max_num_route+1, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
         if self.mlp_route: x_cr = self.route_model(state[:, 0, :])
         else:

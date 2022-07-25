@@ -9,6 +9,7 @@ from agents.actor_critic_agents.SAC import SAC
 from utilities.Utility_Functions import create_actor_distribution
 from cvrptw_utility import MLP_RL_Model
 import wandb
+import os
 
 torch.autograd.set_detect_anomaly(False)
 
@@ -120,16 +121,19 @@ class SAC_Discrete(SAC):
     
     def eval(self):
         self.eval_environment.switch_mode("eval")
-        eval_rounds = 10
         total_reward = 0.0
-        for _ in range(eval_rounds):
-            state = self.eval_environment.reset()
+        dir_name = os.path.dirname(f"{self.eval_environment.data_dir}/cvrp_benchmarks/homberger_{self.eval_environment.instance}_customer_instances/")
+        problem_list = os.listdir(dir_name)
+        problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) > 450]
+        eval_rounds = len(problem_list)
+        for problem in range(problem_list):
+            state = self.eval_environment.reset(problem_file=problem)
             done = False
             while not done:
                 action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
                 total_reward += reward
-        self.eval_environment.switch_mode("train")        
+        self.eval_environment.switch_mode("train")    
         return total_reward / eval_rounds
     
     def print_summary_of_latest_evaluation_episode(self):

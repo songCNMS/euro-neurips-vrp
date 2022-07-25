@@ -30,9 +30,9 @@ class VRPTW_Environment(gym.Env):
         self.trials = 10
         self.reward_threshold = float("inf")
         self.id = "VRPTW"
-        self.num_states = (max_num_nodes_per_route+selected_nodes_num)*feature_dim
+        self.num_states = (max_num_route+1)*max_num_nodes_per_route*feature_dim
         self.observation_space = spaces.Box(
-            low=0.00, high=1.00, shape=(max_num_route+1, max_num_nodes_per_route*feature_dim), dtype=float
+            low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
         self.action_space = spaces.Discrete(max_num_nodes_per_route)
         self.cur_route_name = "PATH_0"
@@ -118,7 +118,7 @@ class VRPTW_Environment(gym.Env):
             if route_name not in self.cur_routes: continue
             route = self.cur_routes[route_name]
             cur_routes_encode_state[i+1, :] = self.get_route_state(route)
-        return cur_routes_encode_state
+        return cur_routes_encode_state.reshape(-1)
         
     def step(self, action):
         node_idx = action
