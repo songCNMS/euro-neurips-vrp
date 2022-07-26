@@ -8,7 +8,7 @@ from gym.utils import seeding
 from cvrptw import read_input_cvrptw, compute_cost_from_routes
 import tools
 from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check, heuristic_improvement_with_candidates, compute_route_cost
-from cvrptw_utility import device, feature_dim, max_num_nodes_per_route, max_num_route, route_output_dim, selected_nodes_num, extract_features_for_nodes, extend_candidate_points
+from cvrptw_utility import depot, device, feature_dim, max_num_nodes_per_route, max_num_route, route_output_dim, selected_nodes_num, extract_features_for_nodes, extend_candidate_points
 from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
 
 
@@ -70,6 +70,8 @@ class VRPTW_Environment(gym.Env):
                                    demands, service_times, 
                                    earliest_start, latest_end, max_horizon, 
                                    distance_warehouses, distance_matrix)
+        self.coordinations = {}
+        for i, c in enumerate([depot] + self.all_customers): self.coordinations[c] = self.problem['coords'][i]
         if routes is None:
             solution_file_name = f"{self.data_dir}/cvrp_benchmarks/RL_train_data/{self.problem_name}.npy"
             tmp_file_name =  f'tmp/{self.problem_name}'
@@ -110,7 +112,7 @@ class VRPTW_Environment(gym.Env):
                 extract_features_for_nodes(c, route, self.truck_capacity, 
                                            self.demands_dict, self.service_time_dict,
                                            self.earliest_start_dict, self.latest_end_dict,
-                                           self.distance_matrix_dict, self.max_distance)
+                                           self.distance_matrix_dict, self.max_distance, self.coordinations)
         return route_state
             
     def get_state(self):
@@ -140,7 +142,7 @@ class VRPTW_Environment(gym.Env):
                                                         self.earliest_start_dict, self.latest_end_dict,
                                                         self.distance_matrix_dict)
             if cost_reduction > 0: self.steps_not_improved = 0
-            self.reward = cost_reduction / self.max_distance
+            self.reward = 10*cost_reduction / self.max_distance
             self.cur_routes = new_routes
         if self.steps_not_improved > self.early_stop_steps:
             self.cur_route_idx += 1

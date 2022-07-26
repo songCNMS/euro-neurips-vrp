@@ -167,8 +167,8 @@ if __name__ == "__main__":
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
-            "update_every_n_steps": 8, # how frequency learn is run
-            "learning_updates_per_learning_session": 32, # how many iterations per learn
+            "update_every_n_steps": 32, # how frequency learn is run
+            "learning_updates_per_learning_session": 1, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 1.0,
             "add_extra_noise": False,
@@ -178,10 +178,10 @@ if __name__ == "__main__":
 
     # AGENTS = [SAC_Discrete, DDQN, Dueling_DDQN, DQN, DQN_With_Fixed_Q_Targets,
     #           DDQN_With_Prioritised_Experience_Replay, A2C, PPO, A3C ]
-    exp_name = datetime.now().strftime("%m%d-%H%M")
-    if not config.linear_route: exp_name += '_GRU'
-    wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=f"SAC_{exp_name}", group=f"{platform.node()}")
     AGENTS = [SAC_Discrete]
+    exp_name = datetime.now().strftime("%m%d-%H%M")
+    if not config.linear_route: exp_name += f'_GRU_{AGENTS[0].agent_name}'
+    wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=f"SAC_{exp_name}", group=f"{platform.node()}")
     trainer = Trainer(config, AGENTS)
     trainer.run_games_for_agents()
     vec_env.close()

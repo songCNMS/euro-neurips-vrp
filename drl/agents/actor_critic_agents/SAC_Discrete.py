@@ -123,18 +123,23 @@ class SAC_Discrete(SAC):
         self.eval_environment.switch_mode("eval")
         total_reward = 0.0
         dir_name = os.path.dirname(f"{self.eval_environment.data_dir}/cvrp_benchmarks/homberger_{self.eval_environment.instance}_customer_instances/")
-        problem_list = os.listdir(dir_name)
-        problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) > 450]
-        eval_rounds = len(problem_list)
+        problem_list = sorted(os.listdir(dir_name))
+        # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
+        eval_rounds = min(10, len(problem_list))
         init_cost, final_cost = 0.0, 0.0
-        for problem in problem_list:
+        for i in range(eval_rounds):
+            problem = problem_list[i]
             state = self.eval_environment.reset(problem_file=problem)
             init_cost += self.eval_environment.init_total_cost
             done = False
+            _total_reward = 0.0
             while not done:
                 action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
-                total_reward += reward
+                print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
+                _total_reward += reward
+            _total_reward /= (self.eval_environment.cur_step+1)
+            total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()
         self.eval_environment.switch_mode("train")    
         return total_reward/eval_rounds, init_cost/eval_rounds, final_cost/eval_rounds
