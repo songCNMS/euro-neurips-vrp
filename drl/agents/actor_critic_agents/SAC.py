@@ -146,12 +146,6 @@ class SAC(Base_Agent):
         mean = torch.clamp(mean, -2.0, 2.0)
         log_std = torch.clamp(log_std, -5.0, 2.0)
         std = log_std.exp()
-        if torch.isnan(mean).any() or torch.isnan(std).any():
-            self.locally_save_policy("best")
-            torch.set_printoptions(profile="full")
-            print(state)
-            print(actor_output)
-        
         normal = Normal(mean, std)
         x_t = normal.rsample()  #rsample means it is sampled using reparameterisation trick
         action = torch.tanh(x_t)

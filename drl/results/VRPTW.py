@@ -172,7 +172,10 @@ if __name__ == "__main__":
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 1.0,
             "add_extra_noise": False,
-            "do_evaluation_iterations": True
+            "do_evaluation_iterations": True,
+            "greedy_exploration": True,
+            "start_exploration_rate": 1.0,
+            "end_exploration_rate": 0.1
         }
     }
 
@@ -181,7 +184,7 @@ if __name__ == "__main__":
     AGENTS = [SAC_Discrete]
     exp_name = datetime.now().strftime("%m%d-%H%M")
     if not config.linear_route: exp_name += f'_GRU_{AGENTS[0].agent_name}'
-    wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=f"SAC_{exp_name}", group=f"{platform.node()}")
+    wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=exp_name, group=f"{platform.node()}")
     trainer = Trainer(config, AGENTS)
     trainer.run_games_for_agents()
     vec_env.close()

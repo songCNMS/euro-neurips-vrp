@@ -10,7 +10,7 @@ from utilities.Utility_Functions import create_actor_distribution
 from cvrptw_utility import MLP_RL_Model
 import wandb
 import os
-
+import random
 torch.autograd.set_detect_anomaly(False)
 
 class SAC_Discrete(SAC):
@@ -54,7 +54,9 @@ class SAC_Discrete(SAC):
         self.add_extra_noise = False
         self.do_evaluation_iterations = self.hyperparameters["do_evaluation_iterations"]
         self.eval_reward_list = []
-        
+        self.greedy_exploration = self.hyperparameters["greedy_exploration"]
+        self.start_exploration_rate = self.hyperparameters["start_exploration_rate"]
+        self.end_exploration_rate = self.hyperparameters["end_exploration_rate"]
 
     def produce_action_and_action_info(self, state):
         """Given the state, produces an action, the probability of the action, the log probability of the action, and
@@ -62,9 +64,14 @@ class SAC_Discrete(SAC):
         action_probabilities = self.actor_local(state)
         # for name, param in self.actor_local.state_dict().items():
         #     print(name, param)
+        greedy_epsilon = self.start_exploration_rate - (self.episode_number*(self.end_exploration_rate - self.start_exploration_rate)) / self.config.num_episodes_to_run
         max_probability_action = torch.argmax(action_probabilities, dim=-1)
-        action_distribution = create_actor_distribution(self.action_types, action_probabilities, self.action_size)
-        action = action_distribution.sample().cpu()
+        if random.random() >= greedy_epsilon:
+            action_distribution = create_actor_distribution(self.action_types, action_probabilities, self.action_size)
+            action = action_distribution.sample().cpu()
+        else:
+            action_shape = (state.size(0), )
+            action = torch.randint(0, self.action_size, action_shape)
         # Have to deal with situation of 0.0 probabilities because we can't do log 0
         z = action_probabilities == 0.0
         z = z.float() * 1e-8
