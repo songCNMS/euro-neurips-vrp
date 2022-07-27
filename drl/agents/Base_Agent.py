@@ -54,23 +54,23 @@ class Base_Agent(object):
 
     def get_environment_title(self):
         """Extracts name of environment from it"""
-        try:
-            if self.is_vec_env: name = self.environment.envs[0].id
-            else: name = self.environment.unwrapped.id
-        except AttributeError:
-            try:
-                if str(self.environment.unwrapped)[1:11] == "FetchReach": return "FetchReach"
-                elif str(self.environment.unwrapped)[1:8] == "AntMaze": return "AntMaze"
-                elif str(self.environment.unwrapped)[1:7] == "Hopper": return "Hopper"
-                elif str(self.environment.unwrapped)[1:9] == "Walker2d": return "Walker2d"
-                else:
-                    name = self.environment.spec.id.split("-")[0]
-            except AttributeError:
-                name = str(self.environment.env)
-                if name[0:10] == "TimeLimit<": name = name[10:]
-                name = name.split(" ")[0]
-                if name[0] == "<": name = name[1:]
-                if name[-3:] == "Env": name = name[:-3]
+        # try:
+        if self.is_vec_env: name = self.environment.envs[0].id
+        else: name = self.environment.id
+        # except AttributeError:
+        #     try:
+        #         if str(self.environment.unwrapped)[1:11] == "FetchReach": return "FetchReach"
+        #         elif str(self.environment.unwrapped)[1:8] == "AntMaze": return "AntMaze"
+        #         elif str(self.environment.unwrapped)[1:7] == "Hopper": return "Hopper"
+        #         elif str(self.environment.unwrapped)[1:9] == "Walker2d": return "Walker2d"
+        #         else:
+        #             name = self.environment.spec.id.split("-")[0]
+        #     except AttributeError:
+        #         name = str(self.environment.env)
+        #         if name[0:10] == "TimeLimit<": name = name[10:]
+        #         name = name.split(" ")[0]
+        #         if name[0] == "<": name = name[1:]
+        #         if name[-3:] == "Env": name = name[:-3]
         return name
 
     def get_lowest_possible_episode_score(self):

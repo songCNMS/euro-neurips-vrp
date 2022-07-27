@@ -23,9 +23,9 @@ class VRPTW_Environment(gym.Env):
         self.mode = 'train'
         self.reset()
         self.cur_step = 0
-        self._max_episode_steps = 1000
-        self.max_episode_steps = 1000
-        self.early_stop_steps = 50
+        self._max_episode_steps = 400
+        self.max_episode_steps = self._max_episode_steps
+        self.early_stop_steps = 10
         self.steps_not_improved = 0
         self.trials = 10
         self.reward_threshold = float("inf")
@@ -44,8 +44,8 @@ class VRPTW_Environment(gym.Env):
     def load_problem(self, problem_file, routes, cur_route_name):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
-            problem_list = os.listdir(dir_name)
-            problem_file = np.random.choice(problem_list)
+            problem_list = sorted(os.listdir(dir_name))
+            problem_file = np.random.choice(problem_list[:20])
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
         if self.instance != 'ortec':
@@ -98,7 +98,7 @@ class VRPTW_Environment(gym.Env):
         self.steps_not_improved = 0
         self.cur_step = 0
         self.state = self.get_state()
-        return np.copy(self.state)
+        return self.state
 
 
     def get_route_cost(self):
@@ -132,27 +132,24 @@ class VRPTW_Environment(gym.Env):
         route = self.cur_routes.get(self.cur_route_name, [])
         self.cur_step += 1
         self.steps_not_improved += 1
-        self.done = False
         if node_idx >= len(route)-1: self.reward = 0.0
         else:
             M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
             new_routes, ori_total_cost, cost_reduction =\
                     heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
-                                                        self.demands_dict, self.service_time_dict, 
-                                                        self.earliest_start_dict, self.latest_end_dict,
-                                                        self.distance_matrix_dict)
-            # if cost_reduction > 0: self.steps_not_improved = 0
-            self.reward = 10*cost_reduction / self.max_distance
+                                                          self.demands_dict, self.service_time_dict, 
+                                                          self.earliest_start_dict, self.latest_end_dict,
+                                                          self.distance_matrix_dict)
+            if cost_reduction > 0: self.steps_not_improved = 0
+            self.reward = max(0.0, 100*cost_reduction / self.max_distance)
             self.cur_routes = new_routes
-        if self.steps_not_improved > self.early_stop_steps:
-            self.cur_route_idx += 1
-            if self.cur_route_idx >= len(self.route_name_list): self.done = True
-            else:
-                self.steps_not_improved = 0
-                self.cur_route_name = self.route_name_list[self.cur_route_idx]
+        # if self.steps_not_improved > self.early_stop_steps:
+        if self.reward <= 0.0:
+            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
+            self.cur_route_name = self.route_name_list[self.cur_route_idx]
         self.state = self.get_state()
-        self.done = (self.done | (self.cur_step >= self._max_episode_steps))
-        return np.copy(self.state), self.reward, self.done, {}
+        self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
+        return self.state, self.reward, self.done, {}
 
     def switch_mode(self, mode):
         self.mode = mode

@@ -1,7 +1,7 @@
 import sys
 sys.path.append("./")
 sys.path.append("./drl")
-
+import multiprocessing as mp
 from yaml import parse
 from agents.actor_critic_agents.A2C import A2C
 from agents.DQN_agents.Dueling_DDQN import Dueling_DDQN
@@ -28,6 +28,7 @@ import platform
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn")
     os.environ["WANDB_API_KEY"] = "116a4f287fd4fbaa6f790a50d2dd7f97ceae4a03"
     wandb.login()
     parser = argparse.ArgumentParser(description='Input of VRPTW Trainer')
@@ -53,7 +54,8 @@ if __name__ == "__main__":
         n_envs=N_ENVS,
         vec_env_cls=DummyVecEnv
     )
-    config.environment = vec_env
+    # config.environment = vec_env
+    config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.eval_environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.log_path = config.output_dir
     config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
@@ -73,7 +75,7 @@ if __name__ == "__main__":
     config.generate_trajectory_warmup_rounds = args.warmup
     config.debug_mode = False
     config.linear_route = False
-    config.is_vec_env = True
+    config.is_vec_env = (not isinstance(config.environment, VRPTW_Environment))
 
 
     config.hyperparameters = {
@@ -123,7 +125,11 @@ if __name__ == "__main__":
             "theta": 0.0, #only required for continuous action games
             "sigma": 0.0, #only required for continuous action games
             "epsilon_decay_rate_denominator": 1.0,
-            "clip_rewards": False
+            "clip_rewards": False,
+            "output_activation": None, 
+            "hidden_activations": "relu", 
+            "dropout": 0.0,
+            "initialiser": "Xavier", 
         },
 
         "Actor_Critic_Agents":  {
@@ -139,23 +145,23 @@ if __name__ == "__main__":
             "Actor": {
                 "learning_rate": 0.001,
                 "linear_hidden_units": [256, 128],
-                "hidden_activations": "tanh",
+                "hidden_activations": "relu",
                 "final_layer_activation": "Softmax",
                 "batch_norm": False,
-                "tau": 0.01,
-                "gradient_clipping_norm": 2.0,
+                "tau": 0.001,
+                "gradient_clipping_norm": 5.0,
                 "initialiser": "Xavier"
             },
 
             "Critic": {
                 "learning_rate": 0.003,
                 "linear_hidden_units": [256, 128],
-                "hidden_activations": "tanh",
+                "hidden_activations": "relu",
                 "final_layer_activation": None,
                 "batch_norm": False,
                 "buffer_size": 100000,
-                "tau": 0.01,
-                "gradient_clipping_norm": 2.0,
+                "tau": 0.001,
+                "gradient_clipping_norm": 5.0,
                 "initialiser": "Xavier"
             },
 
@@ -167,8 +173,8 @@ if __name__ == "__main__":
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
-            "update_every_n_steps": 32, # how frequency learn is run
-            "learning_updates_per_learning_session": 1, # how many iterations per learn
+            "update_every_n_steps": 16, # how frequency learn is run
+            "learning_updates_per_learning_session": 8, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 1.0,
             "add_extra_noise": False,
