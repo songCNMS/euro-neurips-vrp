@@ -299,7 +299,7 @@ class SAC(Base_Agent):
         
 
     def locally_save_policy(self, ep):
-        loc_path = f"{self.config.log_path}/checkpoints_{ep}/"
+        loc_path = f"{self.config.log_path}/SAC_checkpoints_{ep}/"
         os.makedirs(loc_path, exist_ok=True)
         torch.save(self.critic_local.state_dict(), f"{loc_path}/critic.pt")
         torch.save(self.critic_local_2.state_dict(), f"{loc_path}/critic2.pt")
@@ -309,7 +309,7 @@ class SAC(Base_Agent):
         torch.save(self.actor_optimizer.state_dict(), f"{loc_path}/actor_opt.pt")
 
     def load_policy(self, ep):
-        loc_path = f"{self.config.log_path}/checkpoints_{ep}/"
+        loc_path = f"{self.config.log_path}/SAC_checkpoints_{ep}/"
         self.critic_local.load_state_dict(torch.load(f"{loc_path}/critic.pt", map_location=self.device))
         self.critic_local_2.load_state_dict(torch.load(f"{loc_path}/critic2.pt", map_location=self.device))
         self.actor_local.load_state_dict(torch.load(f"{loc_path}/actor.pt", map_location=self.device))

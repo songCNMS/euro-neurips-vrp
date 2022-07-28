@@ -7,6 +7,9 @@ from agents.Base_Agent import Base_Agent
 from exploration_strategies.Epsilon_Greedy_Exploration import Epsilon_Greedy_Exploration
 from utilities.Parallel_Experience_Generator import Parallel_Experience_Generator
 from utilities.Utility_Functions import normalise_rewards, create_actor_distribution
+TRAINING_EPISODES_PER_EVAL_EPISODE = 10
+
+
 
 class PPO(Base_Agent):
     """Proximal Policy Optimization agent"""
@@ -39,10 +42,12 @@ class PPO(Base_Agent):
         exploration_epsilon =  self.exploration_strategy.get_updated_epsilon_exploration({"episode_number": self.episode_number})
         self.many_episode_states, self.many_episode_actions, self.many_episode_rewards = self.experience_generator.play_n_episodes(
             self.hyperparameters["episodes_per_learning_round"], exploration_epsilon)
+        
         self.episode_number += self.hyperparameters["episodes_per_learning_round"]
         self.policy_learn()
         self.update_learning_rate(self.hyperparameters["learning_rate"], self.policy_new_optimizer)
         self.equalise_policies()
+        if (self.episode_num + 1) % TRAINING_EPISODES_PER_EVAL_EPISODE: self.print_summary_of_latest_evaluation_episode()
 
     def policy_learn(self):
         """A learning iteration for the policy"""
@@ -126,3 +131,76 @@ class PPO(Base_Agent):
             self.game_full_episode_scores.append(total_reward)
             self.rolling_results.append(np.mean(self.game_full_episode_scores[-1 * self.rolling_score_window:]))
         self.save_max_result_seen()
+
+    def create_NN(self, input_dim, output_dim):
+        """Creates a neural network for the agents to use"""
+        if hyperparameters is None: hyperparameters = self.hyperparameters
+        if override_seed: hyperparameters["seed"] = override_seed
+        else: hyperparameters["seed"] = self.config.seed
+        default_hyperparameter_choices = {"output_activation": None, "hidden_activations": "relu", "dropout": 0.0,
+                                          "initialiser": "default", "batch_norm": False,
+                                          "columns_of_data_to_be_embedded": [],
+                                          "embedding_dimensions": [], "y_range": (),
+                                          "seed": 1}
+
+        for key in default_hyperparameter_choices:
+            if key not in hyperparameters.keys():
+                hyperparameters[key] = default_hyperparameter_choices[key]
+        hyperparameters["input_dim"] = input_dim
+        hyperparameters["output_dim"] = output_dim
+        hyperparameters["linear_route"] = self.config.linear_route
+        return MLP_RL_Model(hyperparameters).to(self.device)
+    
+    def eval(self):
+        self.eval_environment.switch_mode("eval")
+        total_reward = 0.0
+        dir_name = os.path.dirname(f"{self.eval_environment.data_dir}/cvrp_benchmarks/homberger_{self.eval_environment.instance}_customer_instances/")
+        problem_list = sorted(os.listdir(dir_name))
+        # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
+        eval_rounds = min(10, len(problem_list))
+        init_cost, final_cost = 0.0, 0.0
+        for i in range(eval_rounds):
+            problem = problem_list[i]
+            state = self.eval_environment.reset(problem_file=problem)
+            init_cost += self.eval_environment.init_total_cost
+            done = False
+            _total_reward = 0.0
+            while not done:
+                action = self.actor_pick_action(state=state, eval=True)
+                state, reward, done, _ = self.eval_environment.step(action)
+                print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
+                _total_reward += reward
+            _total_reward /= (self.eval_environment.cur_step+1)
+            total_reward += _total_reward
+            final_cost += self.eval_environment.get_route_cost()
+        self.eval_environment.switch_mode("train")    
+        return total_reward/eval_rounds, init_cost/eval_rounds, final_cost/eval_rounds
+    
+    def print_summary_of_latest_evaluation_episode(self):
+        """Prints a summary of the latest episode"""
+        print(" ")
+        print("----------------------------")
+        print("Episode score {} ".format(self.total_episode_score_so_far))
+        total_reward, init_cost, final_cost = self.eval()
+        wandb.log({"cost_reduction": total_reward,
+                   "init_cost": init_cost,
+                   "final_cost": final_cost})
+        self.eval_reward_list.append(total_reward)
+        print("Eval reward {}, best reward {} ".format(total_reward, np.max(self.eval_reward_list)))
+        print("History rewards: ", self.eval_reward_list)
+        print("----------------------------")
+        self.locally_save_policy(self.episode_number)
+        if total_reward == np.max(self.eval_reward_list):
+            self.locally_save_policy("best")
+
+    def locally_save_policy(self, ep):
+        loc_path = f"{self.config.log_path}/PPO_checkpoints_{ep}/"
+        os.makedirs(loc_path, exist_ok=True)
+        torch.save(self.policy_new.state_dict(), f"{loc_path}/policy_new.pt")
+        torch.save(self.policy_new_optimizer.state_dict(), f"{loc_path}/opt.pt")
+
+    def load_policy(self, ep):
+        loc_path = f"{self.config.log_path}/PPO_checkpoints_{ep}/"
+        self.policy_new.load_state_dict(torch.load(f"{loc_path}/policy_new.pt", map_location=self.device))
+        self.policy_new_optimizer.load_state_dict(torch.load(f"{loc_path}/opt.pt", map_location=self.device))
+        Base_Agent.copy_model_over(self.policy_new, self.policy_old)
