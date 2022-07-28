@@ -178,14 +178,18 @@ def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity,
             min_total_cost_increase = total_cost_increase
             new_routes_after_insertion = {route_name: route[:] for route_name, route in routes_after_insertion.items()}
     new_route_cost = min_total_cost_increase + total_cost_before_insert
-    if new_route_cost < ori_total_cost:
+    final_routes = cur_routes
+    cost_reduction = 0.0
+    if not math.isinf(min_total_cost_increase):
         new_routes = {}
         for route_name, route in routes_before_insert.items():
             if route_name in new_routes_after_insertion: new_routes[route_name] = new_routes_after_insertion[route_name]
             else: new_routes[route_name] = route
-    else: new_routes = cur_routes
-    cost_reduction = (-10.0 if math.isinf(new_route_cost) else ori_total_cost-new_route_cost)
-    return new_routes, ori_total_cost, cost_reduction
+        new_route_cost = compute_route_cost(new_routes, distance_matrix)
+        if new_route_cost < ori_total_cost:
+            final_routes = new_routes
+            cost_reduction = ori_total_cost - new_route_cost
+    return final_routes, ori_total_cost, cost_reduction
 
 
 def heuristic_improvement(cur_routes, all_customers, truck_capacity, demands, service_time, 

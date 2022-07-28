@@ -45,13 +45,12 @@ class VRPTW_Environment(gym.Env):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
-            problem_file = np.random.choice(problem_list[:20])
+            # problem_file = np.random.choice(problem_list[:20])
+            problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
-        if self.instance != 'ortec':
-            self.problem = tools.read_solomon(self.problem_file)
-        else:
-            self.problem = tools.read_vrplib(self.problem_file)
+        if self.instance != 'ortec': self.problem = tools.read_solomon(self.problem_file)
+        else: self.problem = tools.read_vrplib(self.problem_file)
         nb_customers = len(self.problem['is_depot']) - 1
         self.truck_capacity = self.problem['capacity']
         time_windows = self.problem['time_windows']
@@ -100,7 +99,6 @@ class VRPTW_Environment(gym.Env):
         self.state = self.get_state()
         return self.state
 
-
     def get_route_cost(self):
         return compute_route_cost(self.cur_routes, self.distance_matrix_dict)
     
@@ -118,7 +116,6 @@ class VRPTW_Environment(gym.Env):
     def get_state(self):
         route = self.cur_routes.get(self.cur_route_name, [])
         cur_route_state = self.get_route_state(route)
-        
         cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
         cur_routes_encode_state[0, :] = cur_route_state
         for i, route_name in enumerate(self.route_name_list):

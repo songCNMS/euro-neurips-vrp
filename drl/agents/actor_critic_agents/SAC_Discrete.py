@@ -132,6 +132,7 @@ class SAC_Discrete(SAC):
         dir_name = os.path.dirname(f"{self.eval_environment.data_dir}/cvrp_benchmarks/homberger_{self.eval_environment.instance}_customer_instances/")
         problem_list = sorted(os.listdir(dir_name))
         # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
+        problem_list = ["ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"]
         eval_rounds = min(10, len(problem_list))
         init_cost, final_cost = 0.0, 0.0
         for i in range(eval_rounds):

@@ -9,7 +9,7 @@ route_output_dim = 128
 max_num_route = 40
 max_num_nodes_per_route = 20
 depot = "Customer_0"
-feature_dim = 11 # (dist_to_prev_node, dist_to_next_node, service_time, earlieast_time, latest_time, arrival_time, demand, remaining_capacity, dist_to_depot)
+feature_dim = 7 # (service_time, earlieast_time, latest_time, demand, dist_to_depot, x, y)
 selected_nodes_num = 900
 
 
@@ -18,34 +18,32 @@ def extract_features_for_nodes(node, route, truck_capacity,
                                earliest_start, latest_end,
                                distance_matrix, max_distance, coordinations):
     node_feature = np.zeros(feature_dim)
-    if node == depot: return node_feature
-    
+    # if node == depot: return node_feature
     max_duration = latest_end[depot]
     max_service_time = np.max(list(service_time.values()))
-    
-    node_remaining_demand = truck_capacity
-    node_arrival_time = 0
-    next_node = pre_node = None
-    for i, c in enumerate(route):
-        node_remaining_demand -= demands[c]
-        node_arrival_time = max(node_arrival_time, earliest_start[c]) + service_time[c]
-        if c == node: 
-            next_node = (route[i+1] if i < len(route)-1 else depot)
-            pre_node = (route[i-1] if i > 0 else depot)
-            break
+    # node_remaining_demand = truck_capacity
+    # node_arrival_time = 0
+    # next_node = pre_node = None
+    # for i, c in enumerate(route):
+    #     node_remaining_demand -= demands[c]
+    #     node_arrival_time = max(node_arrival_time, earliest_start[c]) + service_time[c]
+    #     if c == node: 
+    #         next_node = (route[i+1] if i < len(route)-1 else depot)
+    #         pre_node = (route[i-1] if i > 0 else depot)
+    #         break
     x_max = np.max([abs(c[0]) for c in coordinations.values()])
     y_max = np.max([abs(c[1]) for c in coordinations.values()])
-    node_feature[0] = distance_matrix[pre_node][node] / max_distance
-    node_feature[1] = distance_matrix[node][next_node] / max_distance
-    node_feature[2] = service_time[node] / max_service_time
-    node_feature[3] = earliest_start[node] / max_duration
-    node_feature[4] = latest_end[node] / max_duration
-    node_feature[5] = node_arrival_time / max_duration
-    node_feature[6] = demands[node] / truck_capacity
-    node_feature[7] = node_remaining_demand / truck_capacity
-    node_feature[8] = distance_matrix[node][depot] / max_distance
-    node_feature[9] = coordinations[node][0] / x_max
-    node_feature[10] = coordinations[node][1] / y_max
+    # node_feature[0] = distance_matrix[pre_node][node] / max_distance
+    # node_feature[1] = distance_matrix[node][next_node] / max_distance
+    node_feature[0] = service_time[node] / max_service_time
+    node_feature[1] = earliest_start[node] / max_duration
+    node_feature[2] = latest_end[node] / max_duration
+    # node_feature[5] = node_arrival_time / max_duration
+    node_feature[3] = demands[node] / truck_capacity
+    # node_feature[7] = node_remaining_demand / truck_capacity
+    node_feature[4] = distance_matrix[node][depot] / max_distance
+    node_feature[5] = coordinations[node][0] / x_max
+    node_feature[6] = coordinations[node][1] / y_max
     return node_feature
 
 def get_candidate_feateures(candidates, node_to_route_dict,
