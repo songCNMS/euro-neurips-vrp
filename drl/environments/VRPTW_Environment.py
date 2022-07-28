@@ -23,9 +23,9 @@ class VRPTW_Environment(gym.Env):
         self.mode = 'train'
         self.reset()
         self.cur_step = 0
-        self._max_episode_steps = 1000
-        self.max_episode_steps = 1000
-        self.early_stop_steps = 50
+        self._max_episode_steps = 400
+        self.max_episode_steps = self._max_episode_steps
+        self.early_stop_steps = 10
         self.steps_not_improved = 0
         self.trials = 10
         self.reward_threshold = float("inf")
@@ -142,7 +142,7 @@ class VRPTW_Environment(gym.Env):
                                                         self.earliest_start_dict, self.latest_end_dict,
                                                         self.distance_matrix_dict)
             # if cost_reduction > 0: self.steps_not_improved = 0
-            self.reward = 10*cost_reduction / self.max_distance
+            self.reward = max(0.0, 100*cost_reduction / self.max_distance)
             self.cur_routes = new_routes
         if self.steps_not_improved > self.early_stop_steps:
             self.cur_route_idx += 1

@@ -111,14 +111,32 @@ def map_node_to_route(cur_routes):
 if pt.cuda.is_available(): device = "cuda:0"
 else: device = "cpu"
 
+class Customer_Model(pt.nn.Module):
+    def __init__(self):
+        super(Customer_Model, self).__init__()
+        self.output_dim = 32
+        self.mlp = NN(input_dim=feature_dim, 
+                     layers_info=[64, 64, self.output_dim],
+                     output_activation="relu",
+                     hidden_activations="relu", initialiser="Xavier")
+    
+    def forward(self, x):
+        return self.mlp(x)
+    
+
 class Route_Model(pt.nn.Module):
     def __init__(self):
         super(Route_Model, self).__init__()
+        self.customer_model = Customer_Model()
         self.num_hidden = 4
-        self.rnn = pt.nn.GRU(feature_dim, route_output_dim, self.num_hidden)
+        self.rnn = pt.nn.GRU(self.customer_model.output_dim, route_output_dim, self.num_hidden)
     
     def forward(self, x):
-        x = x.reshape(max_num_nodes_per_route, -1, feature_dim)
+        x = x.reshape(-1, max_num_nodes_per_route, feature_dim).permute(1, 0, 2)
+        x_rnn = []
+        for i in range(max_num_nodes_per_route):
+            x_rnn.append(self.customer_model(x[i, :, :]))
+        x = pt.torch.stack(x_rnn, axis=0)
         h = pt.torch.zeros(self.num_hidden, x.size(1), route_output_dim).to(device)
         return self.rnn(x, h)
 
