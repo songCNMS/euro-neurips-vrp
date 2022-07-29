@@ -30,7 +30,7 @@ class SAC_Discrete(SAC):
         self.critic_optimizer_2 = torch.optim.Adam(self.critic_local_2.parameters(),
                                                    lr=self.hyperparameters["Critic"]["learning_rate"], eps=1e-4)
         self.critic_target = self.create_NN(input_dim=self.state_size, output_dim=self.action_size,
-                                           key_to_use="Critic")
+                                            key_to_use="Critic")
         self.critic_target_2 = self.create_NN(input_dim=self.state_size, output_dim=self.action_size,
                                             key_to_use="Critic")
         Base_Agent.copy_model_over(self.critic_local, self.critic_target)

@@ -16,7 +16,7 @@ from cvrptw_utility import map_node_to_route, VRPTWDataset, device,  acc_mrse_co
 def eval_model(model, lossfunc, dataset):
     dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=8, pin_memory=True)
     total_loss = 0.0
-    with pt.no_grad():
+    with torch.no_grad():
         iteration = 0
         for candidates, customers, labels in dataloader:
             outputs = model(candidates.to(device), customers.to(device)).squeeze(axis=1)
@@ -51,7 +51,7 @@ def train_model(model, optimizer, lossfunc, dataset, output_dir, eval_dataset=No
         eval_loss_list.append(eval_loss)
         wandb.log({"train_loss": train_loss, "eval_loss": eval_loss})
         if np.min(eval_loss_list) == eval_loss_list[-1]:
-            pt.save({
+            torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
@@ -261,9 +261,9 @@ if __name__ == '__main__':
         input_dim = feature_dim*(selected_nodes_num+2)
         # loss func and optim
         model = MLP_Model().to(device)
-        # optimizer = pt.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.01)
-        optimizer = pt.optim.SGD(model.parameters(), lr=0.001)
-        lossfunc = pt.nn.MSELoss().to(device)
+        # optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.01)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+        lossfunc = torch.nn.MSELoss().to(device)
         # data_folder = "amlt/vrptw_feature/vrptw_ortec/predict_data/"
         data_folder = f"{data_dir}/cvrp_benchmarks/predict_data/"
         candidate_features, customer_features, cost_improvements = get_local_features(data_folder)

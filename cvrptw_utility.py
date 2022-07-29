@@ -1,11 +1,11 @@
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-import torch as pt
+import torch
 import math
 from nn_builder.pytorch.NN import NN
 
 
-route_output_dim = 128
+route_output_dim = 64
 max_num_route = 40
 max_num_nodes_per_route = 20
 depot = "Customer_0"
@@ -106,15 +106,15 @@ def map_node_to_route(cur_routes):
 
 
 
-if pt.cuda.is_available(): device = "cuda:0"
+if torch.cuda.is_available(): device = "cuda:0"
 else: device = "cpu"
 
-class Customer_Model(pt.nn.Module):
+class Customer_Model(torch.nn.Module):
     def __init__(self):
         super(Customer_Model, self).__init__()
-        self.output_dim = 32
+        self.output_dim = 16
         self.mlp = NN(input_dim=feature_dim, 
-                     layers_info=[64, 64, self.output_dim],
+                     layers_info=[32, 32, self.output_dim],
                      output_activation="relu",
                      hidden_activations="relu", initialiser="Xavier")
     
@@ -122,24 +122,24 @@ class Customer_Model(pt.nn.Module):
         return self.mlp(x)
     
 
-class Route_Model(pt.nn.Module):
+class Route_Model(torch.nn.Module):
     def __init__(self):
         super(Route_Model, self).__init__()
         self.customer_model = Customer_Model()
-        self.num_hidden = 4
-        self.rnn = pt.nn.GRU(self.customer_model.output_dim, route_output_dim, self.num_hidden)
+        self.num_hidden = 2
+        self.rnn = torch.nn.GRU(self.customer_model.output_dim, route_output_dim, self.num_hidden)
     
     def forward(self, x):
         x = x.reshape(-1, max_num_nodes_per_route, feature_dim).permute(1, 0, 2)
         x_rnn = []
         for i in range(max_num_nodes_per_route):
             x_rnn.append(self.customer_model(x[i, :, :]))
-        x = pt.torch.stack(x_rnn, axis=0)
-        h = pt.torch.zeros(self.num_hidden, x.size(1), route_output_dim).to(device)
+        x = torch.stack(x_rnn, axis=0)
+        h = torch.zeros(self.num_hidden, x.size(1), route_output_dim).to(device)
         return self.rnn(x, h)
 
 
-class Route_MLP_Model(pt.nn.Module):
+class Route_MLP_Model(torch.nn.Module):
     def __init__(self):
         super(Route_MLP_Model, self).__init__()
         self.mlp = NN(input_dim=max_num_nodes_per_route*feature_dim, 
@@ -151,18 +151,18 @@ class Route_MLP_Model(pt.nn.Module):
         return self.mlp(x)
 
 
-class MLP_Model(pt.nn.Module):
+class MLP_Model(torch.nn.Module):
     def __init__(self):
         super(MLP_Model, self).__init__()
         self.route_model = Route_Model()
-        self.candidate_model = pt.nn.Linear(2*feature_dim, 64)
-        self.fc1 = pt.nn.Linear(route_output_dim+64, 256)
-        self.fc2 = pt.nn.Linear(256, 128)
-        self.fc3 = pt.nn.Linear(128, 1)
-        self.dropout = pt.nn.Dropout(p=0.2)
-        pt.nn.init.xavier_uniform_(self.fc1.weight)
-        pt.nn.init.xavier_uniform_(self.fc2.weight)
-        pt.nn.init.xavier_uniform_(self.fc3.weight)
+        self.candidate_model = torch.nn.Linear(2*feature_dim, 64)
+        self.fc1 = torch.nn.Linear(route_output_dim+64, 256)
+        self.fc2 = torch.nn.Linear(256, 128)
+        self.fc3 = torch.nn.Linear(128, 1)
+        self.dropout = torch.nn.Dropout(p=0.2)
+        torch.nn.init.xavier_uniform_(self.fc1.weight)
+        torch.nn.init.xavier_uniform_(self.fc2.weight)
+        torch.nn.init.xavier_uniform_(self.fc3.weight)
         
     def forward(self, candidates, customers):
         x_c = self.candidate_model(candidates)
@@ -172,34 +172,38 @@ class MLP_Model(pt.nn.Module):
             x_r, _ = self.route_model(x_r)
             x_r = x_r[-1, :, :]
             route_rnn_output_list.append(x_r)
-        x_r = pt.torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
+        x_r = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
         x_r = self.dropout(self.x_r)
-        x = pt.torch.cat((x_r, x_c), axis=1)
-        dout = pt.tanh(self.fc1(x))
-        dout = pt.tanh(self.fc2(dout))
+        x = torch.cat((x_r, x_c), axis=1)
+        dout = torch.tanh(self.fc1(x))
+        dout = torch.tanh(self.fc2(dout))
         return self.fc3(dout)
     
-    
-class MLP_RL_Model(pt.nn.Module):
+   
+class MLP_RL_Model(torch.nn.Module):
     def __init__(self, hyperparameters):
         super(MLP_RL_Model, self).__init__()
         self.mlp_route = hyperparameters["linear_route"]
         if self.mlp_route: self.route_model = Route_MLP_Model()
         else: self.route_model = Route_Model()
-        if hyperparameters["final_layer_activation"] == "Softmax": self.final_layer = pt.nn.Softmax(dim=1)
-        else: self.final_layer = None
+        self.final_layer = torch.nn.Softmax(dim=1)
         self.mlp = NN(input_dim=route_output_dim*2, 
-                        layers_info=hyperparameters["linear_hidden_units"] + [hyperparameters["output_dim"]],
-                        output_activation=None,
-                        batch_norm=hyperparameters["batch_norm"], dropout=hyperparameters["dropout"],
-                        hidden_activations=hyperparameters["hidden_activations"], initialiser=hyperparameters["initialiser"],
-                        columns_of_data_to_be_embedded=hyperparameters["columns_of_data_to_be_embedded"],
-                        embedding_dimensions=hyperparameters["embedding_dimensions"], y_range=hyperparameters["y_range"],
-                        random_seed=hyperparameters["seed"])
+                      layers_info=hyperparameters["linear_hidden_units"] + [hyperparameters["output_dim"]],
+                      output_activation=None,
+                      batch_norm=hyperparameters["batch_norm"], dropout=hyperparameters["dropout"],
+                      hidden_activations=hyperparameters["hidden_activations"], initialiser=hyperparameters["initialiser"],
+                      columns_of_data_to_be_embedded=hyperparameters["columns_of_data_to_be_embedded"],
+                      embedding_dimensions=hyperparameters["embedding_dimensions"], y_range=hyperparameters["y_range"],
+                      random_seed=hyperparameters["seed"])
 
     def forward(self, state):
         num_samples = state.size(0)
-        state = state.reshape(num_samples, max_num_route+1, max_num_nodes_per_route*feature_dim)
+        route_len = state[:, 0].cpu().numpy().astype(int)
+        route_len_mask = np.zeros((num_samples, max_num_nodes_per_route))
+        for i in range(num_samples):
+            route_len_mask[i, :route_len[i]] = 1.0
+        route_len_mask = torch.from_numpy(route_len_mask).to(device)
+        state = state[:, 1:].reshape(num_samples, max_num_route+1, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
         if self.mlp_route: x_cr = self.route_model(state[:, 0, :])
         else:
@@ -213,14 +217,69 @@ class MLP_RL_Model(pt.nn.Module):
                 x_r, _ = self.route_model(x_r)
                 x_r = x_r[-1, :, :]
             route_rnn_output_list.append(x_r)
-        x_r = pt.torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
-        x = pt.torch.cat((x_cr, x_r), axis=1)
+        x_r = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
+        x = torch.cat((x_cr, x_r), axis=1)
         x = self.mlp(x)
-        if self.final_layer is not None:
-            x = self.final_layer(x)
-        return x
+        x = self.final_layer(x)
+        out = torch.mul(x, route_len_mask)
+        return out
     
+def get_route_mask(route_nums):
+    num_samples = route_nums.size(0)
+    route_nums_np = route_nums.cpu().numpy()
+    route_num_mask = np.zeros((num_samples, max_num_route))
+    route_len_mask = np.zeros((num_samples, max_num_route, max_num_nodes_per_route))
+    for i in range(num_samples):
+        route_num = np.count_nonzero(route_nums_np[i, :])
+        route_num_mask[i, :route_num] = 1.0
+        for j, route_len in enumerate(route_nums_np[i, :]):
+            if route_len > 0: route_len_mask[i, j, :route_len] = 1.0
+    route_num_mask = torch.from_numpy(route_num_mask).to(device)
+    route_len_mask = torch.from_numpy(route_len_mask).to(device)
+    return route_num_mask, route_len_mask
     
+
+class MLP_Route_RL_Model(torch.nn.Module):
+    def __init__(self, hyperparameters):
+        super(MLP_Route_RL_Model, self).__init__()
+        self.mlp_route = hyperparameters["linear_route"]
+        self.route_model = Route_Model()
+        self.final_layer = torch.nn.Softmax(dim=1)
+        self.node_selection_mlp = NN(input_dim=route_output_dim*2, 
+                                    layers_info=hyperparameters["linear_hidden_units"] + [max_num_nodes_per_route],
+                                    output_activation=None,
+                                    batch_norm=hyperparameters["batch_norm"], dropout=hyperparameters["dropout"],
+                                    hidden_activations=hyperparameters["hidden_activations"], initialiser=hyperparameters["initialiser"],
+                                    columns_of_data_to_be_embedded=hyperparameters["columns_of_data_to_be_embedded"],
+                                    embedding_dimensions=hyperparameters["embedding_dimensions"], y_range=hyperparameters["y_range"],
+                                    random_seed=hyperparameters["seed"])
+
+    def forward(self, state):
+        num_samples = state.size(0)
+        route_nums = state[num_samples, -max_num_route:]
+        _, route_len_mask = get_route_mask(route_nums)
+        customers = state[num_samples, :-max_num_route]
+        customers = customers.reshape(num_samples, max_num_route, max_num_nodes_per_route*feature_dim)
+        route_rnn_output_list = []
+        for i in range(max_num_route):
+            x_r = customers[:, i, :]
+            x_r, _ = self.route_model(x_r)
+            x_r = x_r[-1, :, :]
+            route_rnn_output_list.append(x_r)
+        x_g = torch.stack(route_rnn_output_list, dim=1)
+        x_g_mean = x_g.mean(axis=1)
+        node_out = []
+        for i in range(max_num_route):
+            r = route_rnn_output_list[i]
+            node_selection_in = torch.cat((r, x_g_mean), axis=1)
+            node_selection_out = self.node_selection_mlp(node_selection_in)
+            node_selection_out = self.final_layer(node_selection_out)
+            node_selection_out = torch.mul(node_selection_out, route_len_mask)
+            node_out.append(node_selection_out)
+        node_out = torch.cat(node_out, axis=1)
+        return node_selection_out
+
+
 def acc_mrse_compute(pred, label):
     pred = pred.cpu().data.numpy()
     label = label.cpu().data.numpy()
@@ -329,9 +388,9 @@ def select_candidate_points_ML(model, routes, distance_matrix,
     _customers = np.concatenate(customers_list, axis=0)
     _costs = np.zeros(len(candidates_list))
     candidates, customers, labels = transform_data(_candidates, _customers, _costs)
-    candidates_ts = pt.from_numpy(candidates).to(device)
-    customers_ts = pt.from_numpy(customers).to(device)
-    with pt.no_grad():
+    candidates_ts = torch.from_numpy(candidates).to(device)
+    customers_ts = torch.from_numpy(customers).to(device)
+    with torch.no_grad():
         predict_cost_reductions = model(candidates_ts, customers_ts).squeeze(axis=1).cpu().detach().numpy()
     # candidates_with_cost = []
     # for (route_name, node_idx), cost in zip(all_candidates, predict_cost_reductions):

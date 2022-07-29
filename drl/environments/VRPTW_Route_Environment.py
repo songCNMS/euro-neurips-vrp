@@ -13,8 +13,8 @@ from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
 
 
 
-class VRPTW_Environment(gym.Env):
-    environment_name = "VRPTW Environment"
+class VRPTW_Route_Environment(gym.Env):
+    environment_name = "VRPTW Route Selection Environment"
 
     def __init__(self, instance, data_dir, seed=1):
         self.instance = instance
@@ -29,12 +29,12 @@ class VRPTW_Environment(gym.Env):
         self.steps_not_improved = 0
         self.trials = 10
         self.reward_threshold = float("inf")
-        self.id = "VRPTW"
-        self.num_states = 1+(max_num_route+1)*max_num_nodes_per_route*feature_dim
+        self.id = "VRPTW_Route_Selection"
+        self.num_states = max_num_nodes_per_route*feature_dim
         self.observation_space = spaces.Box(
             low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
-        self.action_space = spaces.Discrete(max_num_nodes_per_route)
+        self.action_space = spaces.Discrete(max_num_route*max_num_nodes_per_route)
         self.cur_route_name = "PATH_0"
         self.cur_cost = None
         
@@ -88,8 +88,6 @@ class VRPTW_Environment(gym.Env):
         self.cur_routes = routes
         self.init_total_cost = self.get_route_cost()
         self.route_name_list = sorted(list(self.cur_routes.keys()))
-        self.cur_route_idx = 0
-        self.cur_route_name = self.route_name_list[self.cur_route_idx]
             
     def reset(self, problem_file=None, routes=None, cur_route=None):
         # self.load_problem("ORTEC-VRPTW-ASYM-50d1f78d-d1-n329-k19.txt", routes, cur_route)
@@ -114,21 +112,19 @@ class VRPTW_Environment(gym.Env):
         return route_state
             
     def get_state(self):
-        route = self.cur_routes.get(self.cur_route_name, [])
-        cur_route_state = self.get_route_state(route)
-        cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
-        cur_routes_encode_state[0, :] = cur_route_state
+        cur_routes_encode_state = np.zeros((max_num_route, max_num_nodes_per_route*feature_dim))
+        route_len = np.zeros(max_num_route)
         for i, route_name in enumerate(self.route_name_list):
-            if route_name not in self.cur_routes: continue
             route = self.cur_routes[route_name]
-            cur_routes_encode_state[i+1, :] = self.get_route_state(route)
-        state = cur_routes_encode_state.reshape(-1)
-        state = np.concatenate(([len(route)], state), axis=0)
+            cur_routes_encode_state[i, :] = self.get_route_state(route)
+            route_len[i] = len(route)
+        state = np.concatenate((route_len, cur_routes_encode_state.reshape(-1)), axis=0)
         return state
         
     def step(self, action):
-        node_idx = action
-        route = self.cur_routes.get(self.cur_route_name, [])
+        route_idx, node_idx = (action // max_num_nodes_per_route), (action % max_num_nodes_per_route)
+        cur_route_name = self.route_name_list[route_idx]
+        route = self.cur_routes.get(cur_route_name, [])
         self.cur_step += 1
         self.steps_not_improved += 1
         if node_idx >= len(route)-1: self.reward = 0.0
@@ -146,6 +142,7 @@ class VRPTW_Environment(gym.Env):
         if self.reward <= 0.0:
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
             self.cur_route_name = self.route_name_list[self.cur_route_idx]
+        self.route_name_list = sorted(list(self.cur_routes.keys()))
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
         return self.state, self.reward, self.done, {}

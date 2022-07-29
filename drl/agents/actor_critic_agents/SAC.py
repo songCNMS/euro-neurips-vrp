@@ -304,17 +304,17 @@ class SAC(Base_Agent):
         torch.save(self.critic_local.state_dict(), f"{loc_path}/critic.pt")
         torch.save(self.critic_local_2.state_dict(), f"{loc_path}/critic2.pt")
         torch.save(self.actor_local.state_dict(), f"{loc_path}/actor.pt")
-        torch.save(self.critic_optimizer.state_dict(), f"{loc_path}/critic_opt.pt")
-        torch.save(self.critic_optimizer_2.state_dict(), f"{loc_path}/critic2_opt.pt")
-        torch.save(self.actor_optimizer.state_dict(), f"{loc_path}/actor_opt.pt")
+        torch.save(self.critic_optimizer.state_dict(), f"{loc_path}/critic_otorch.pt")
+        torch.save(self.critic_optimizer_2.state_dict(), f"{loc_path}/critic2_otorch.pt")
+        torch.save(self.actor_optimizer.state_dict(), f"{loc_path}/actor_otorch.pt")
 
     def load_policy(self, ep):
         loc_path = f"{self.config.log_path}/SAC_checkpoints_{ep}/"
         self.critic_local.load_state_dict(torch.load(f"{loc_path}/critic.pt", map_location=self.device))
         self.critic_local_2.load_state_dict(torch.load(f"{loc_path}/critic2.pt", map_location=self.device))
         self.actor_local.load_state_dict(torch.load(f"{loc_path}/actor.pt", map_location=self.device))
-        self.critic_optimizer.load_state_dict(torch.load(f"{loc_path}/critic_opt.pt", map_location=self.device))
-        self.critic_optimizer_2.load_state_dict(torch.load(f"{loc_path}/critic2_opt.pt", map_location=self.device))
-        self.actor_optimizer.load_state_dict(torch.load(f"{loc_path}/actor_opt.pt", map_location=self.device))
+        self.critic_optimizer.load_state_dict(torch.load(f"{loc_path}/critic_otorch.pt", map_location=self.device))
+        self.critic_optimizer_2.load_state_dict(torch.load(f"{loc_path}/critic2_otorch.pt", map_location=self.device))
+        self.actor_optimizer.load_state_dict(torch.load(f"{loc_path}/actor_otorch.pt", map_location=self.device))
         Base_Agent.copy_model_over(self.critic_local, self.critic_target)
         Base_Agent.copy_model_over(self.critic_local_2, self.critic_target_2)

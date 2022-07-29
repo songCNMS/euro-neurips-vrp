@@ -197,10 +197,10 @@ class PPO(Base_Agent):
         loc_path = f"{self.config.log_path}/PPO_checkpoints_{ep}/"
         os.makedirs(loc_path, exist_ok=True)
         torch.save(self.policy_new.state_dict(), f"{loc_path}/policy_new.pt")
-        torch.save(self.policy_new_optimizer.state_dict(), f"{loc_path}/opt.pt")
+        torch.save(self.policy_new_optimizer.state_dict(), f"{loc_path}/otorch.pt")
 
     def load_policy(self, ep):
         loc_path = f"{self.config.log_path}/PPO_checkpoints_{ep}/"
         self.policy_new.load_state_dict(torch.load(f"{loc_path}/policy_new.pt", map_location=self.device))
-        self.policy_new_optimizer.load_state_dict(torch.load(f"{loc_path}/opt.pt", map_location=self.device))
+        self.policy_new_optimizer.load_state_dict(torch.load(f"{loc_path}/otorch.pt", map_location=self.device))
         Base_Agent.copy_model_over(self.policy_new, self.policy_old)
