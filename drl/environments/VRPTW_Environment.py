@@ -114,8 +114,8 @@ class VRPTW_Environment(gym.Env):
         return route_state
             
     def get_state(self):
-        route = self.cur_routes.get(self.cur_route_name, [])
-        cur_route_state = self.get_route_state(route)
+        cur_route = self.cur_routes[self.cur_route_name]
+        cur_route_state = self.get_route_state(cur_route)
         cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
         cur_routes_encode_state[0, :] = cur_route_state
         for i, route_name in enumerate(self.route_name_list):
@@ -123,29 +123,29 @@ class VRPTW_Environment(gym.Env):
             route = self.cur_routes[route_name]
             cur_routes_encode_state[i+1, :] = self.get_route_state(route)
         state = cur_routes_encode_state.reshape(-1)
-        state = np.concatenate(([len(route)], state), axis=0)
+        state = np.concatenate(([len(cur_route)], state), axis=0)
         return state
         
     def step(self, action):
         node_idx = action
-        route = self.cur_routes.get(self.cur_route_name, [])
+        route = self.cur_routes[self.cur_route_name]
+        assert node_idx < len(route), f"state: {self.state[0]}, node: {node_idx}, route: {len(route)}"
         self.cur_step += 1
         self.steps_not_improved += 1
-        if node_idx >= len(route)-1: self.reward = 0.0
-        else:
-            M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
-            new_routes, ori_total_cost, cost_reduction =\
-                    heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
-                                                          self.demands_dict, self.service_time_dict, 
-                                                          self.earliest_start_dict, self.latest_end_dict,
-                                                          self.distance_matrix_dict)
-            if cost_reduction > 0: self.steps_not_improved = 0
-            self.reward = max(0.0, 100*cost_reduction / self.max_distance)
-            self.cur_routes = new_routes
-        # if self.steps_not_improved > self.early_stop_steps:
+        M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
+        new_routes, ori_total_cost, cost_reduction =\
+                heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
+                                                        self.demands_dict, self.service_time_dict, 
+                                                        self.earliest_start_dict, self.latest_end_dict,
+                                                        self.distance_matrix_dict)
+        if cost_reduction > 0: self.steps_not_improved = 0
+        self.reward = max(0.0, 100*cost_reduction / self.max_distance)
+        self.cur_routes = new_routes
         if self.reward <= 0.0:
-            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
-            self.cur_route_name = self.route_name_list[self.cur_route_idx]
+            while True:
+                self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
+                self.cur_route_name = self.route_name_list[self.cur_route_idx]
+                if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
         return self.state, self.reward, self.done, {}

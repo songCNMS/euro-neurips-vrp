@@ -1,4 +1,6 @@
 from cvrptw_utility import MLP_RL_Model
+from drl.environments.VRPTW_Environment import VRPTW_Environment
+from drl.environments.VRPTW_Route_Environment import VRPTW_Route_Environment
 import torch
 from torch.optim import Adam
 import torch.nn.functional as F
@@ -7,7 +9,7 @@ from agents.Base_Agent import Base_Agent
 from utilities.data_structures.Replay_Buffer import Replay_Buffer
 from agents.actor_critic_agents.SAC import SAC
 from utilities.Utility_Functions import create_actor_distribution
-from cvrptw_utility import MLP_RL_Model
+from cvrptw_utility import MLP_RL_Model, MLP_Route_RL_Model
 import wandb
 import os
 import random
@@ -70,8 +72,11 @@ class SAC_Discrete(SAC):
             action_distribution = create_actor_distribution(self.action_types, action_probabilities, self.action_size)
             action = action_distribution.sample().cpu()
         else:
-            action_shape = (state.size(0), )
-            action = torch.randint(0, self.action_size, action_shape)
+            # action_shape = (state.size(0), )
+            if len(state.shape) > 1: num_routes = state[:, 0].cpu().numpy()
+            else: num_routes = np.array([state[0]])
+            action = torch.from_numpy(np.random.randint(num_routes)).to(self.device)
+            # action = torch.randint(0, self.action_size, action_shape)
         # Have to deal with situation of 0.0 probabilities because we can't do log 0
         z = action_probabilities == 0.0
         z = z.float() * 1e-8
@@ -124,6 +129,8 @@ class SAC_Discrete(SAC):
         hyperparameters["input_dim"] = input_dim
         hyperparameters["output_dim"] = output_dim
         hyperparameters["linear_route"] = self.config.linear_route
+        # if isinstance(self.environment, VRPTW_Environment): return MLP_RL_Model(hyperparameters).to(self.device)
+        # else: return MLP_Route_RL_Model(hyperparameters).to(self.device)
         return MLP_RL_Model(hyperparameters).to(self.device)
     
     def eval(self):

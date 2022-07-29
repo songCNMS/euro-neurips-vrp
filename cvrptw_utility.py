@@ -7,7 +7,7 @@ from nn_builder.pytorch.NN import NN
 
 route_output_dim = 64
 max_num_route = 40
-max_num_nodes_per_route = 20
+max_num_nodes_per_route = 30
 depot = "Customer_0"
 feature_dim = 7 # (service_time, earlieast_time, latest_time, demand, dist_to_depot, x, y)
 selected_nodes_num = 900
@@ -256,9 +256,9 @@ class MLP_Route_RL_Model(torch.nn.Module):
 
     def forward(self, state):
         num_samples = state.size(0)
-        route_nums = state[num_samples, -max_num_route:]
+        route_nums = state[num_samples, :max_num_route]
         _, route_len_mask = get_route_mask(route_nums)
-        customers = state[num_samples, :-max_num_route]
+        customers = state[num_samples, max_num_route:]
         customers = customers.reshape(num_samples, max_num_route, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
         for i in range(max_num_route):

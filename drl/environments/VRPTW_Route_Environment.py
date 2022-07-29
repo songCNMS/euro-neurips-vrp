@@ -123,6 +123,8 @@ class VRPTW_Route_Environment(gym.Env):
         
     def step(self, action):
         route_idx, node_idx = (action // max_num_nodes_per_route), (action % max_num_nodes_per_route)
+        print("state: ", self.state[:max_num_route])
+        print("action: ", action, "route_idx: ", route_idx, "node_idx: ", node_idx)
         cur_route_name = self.route_name_list[route_idx]
         route = self.cur_routes.get(cur_route_name, [])
         self.cur_step += 1
@@ -139,9 +141,6 @@ class VRPTW_Route_Environment(gym.Env):
             self.reward = max(0.0, 100*cost_reduction / self.max_distance)
             self.cur_routes = new_routes
         # if self.steps_not_improved > self.early_stop_steps:
-        if self.reward <= 0.0:
-            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
-            self.cur_route_name = self.route_name_list[self.cur_route_idx]
         self.route_name_list = sorted(list(self.cur_routes.keys()))
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
