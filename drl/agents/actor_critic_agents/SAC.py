@@ -119,11 +119,10 @@ class SAC(Base_Agent):
         if eval_ep: action = self.actor_pick_action(state=state, eval=True)
         elif self.global_step_number < self.hyperparameters["min_steps_before_learning"]:
             if len(state.shape) > 1:
-                num_routes = state[:, 0].cpu().numpy()
-                action = np.random.randint(num_routes)
+                num_routes = state[:, 0].astype(int)
             else:
-                num_routes = np.array([state[0]])
-                action = np.random.randint(num_routes)
+                num_routes = np.array([state[0]]).astype(int)
+            action = np.random.randint(num_routes)
             action = action[0]
             # action = self.environment.action_space.sample()
             print("Picking random action ", action)

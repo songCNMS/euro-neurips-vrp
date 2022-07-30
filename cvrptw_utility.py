@@ -220,7 +220,7 @@ class MLP_RL_Model(torch.nn.Module):
         x_r = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
         x = torch.cat((x_cr, x_r), axis=1)
         x = self.mlp(x)
-        x = self.final_layer(x)
+        x = 10*self.final_layer(x)
         out = torch.mul(x, route_len_mask)
         return out
     
