@@ -45,8 +45,8 @@ class VRPTW_Environment(gym.Env):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
-            # problem_file = np.random.choice(problem_list[:20])
-            problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
+            problem_file = np.random.choice(problem_list[:20])
+            # problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
         if self.instance != 'ortec': self.problem = tools.read_solomon(self.problem_file)

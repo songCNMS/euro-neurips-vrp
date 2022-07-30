@@ -89,9 +89,6 @@ class SAC(Base_Agent):
             if self.is_vec_env: self.action = np.array([self.pick_action(eval_ep, state=state) for i, state in enumerate(self.state)])
             else: self.action = self.pick_action(eval_ep)
             self.conduct_action(self.action)
-            # if eval_ep:
-            #     print("state: ", self.environment.state)
-            #     print(f"step: {self.environment.local_env.cur_step}, action: {self.action}, reward: {self.environment.reward}, rep: {self.environment.local_env.cur_replenish_amount}, instock: {self.environment.local_env.in_stocks}, sales: {self.environment.local_env.cur_sales}, demand: {self.environment.local_env.cur_demand}")
             if self.time_for_critic_and_actor_to_learn():
                 for _ in range(self.hyperparameters["learning_updates_per_learning_session"]):
                     self.learn()
@@ -118,12 +115,8 @@ class SAC(Base_Agent):
         if state is None: state = self.state
         if eval_ep: action = self.actor_pick_action(state=state, eval=True)
         elif self.global_step_number < self.hyperparameters["min_steps_before_learning"]:
-            if len(state.shape) > 1:
-                num_routes = state[:, 0].astype(int)
-            else:
-                num_routes = np.array([state[0]]).astype(int)
+            num_routes = int(state[0])
             action = np.random.randint(num_routes)
-            action = action[0]
             # action = self.environment.action_space.sample()
             print("Picking random action ", action)
         else: action = self.actor_pick_action(state=state)

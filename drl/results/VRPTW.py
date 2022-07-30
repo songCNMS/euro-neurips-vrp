@@ -47,15 +47,14 @@ if __name__ == "__main__":
         config.data_dir = "./"
         config.output_dir = "./logs/"
     
-    wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
-    N_ENVS = 4
+    N_ENVS = 8
     vec_env = make_vec_env(
-        lambda: wrappable_env,
+        lambda: VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100)),
         n_envs=N_ENVS,
         vec_env_cls=DummyVecEnv
     )
-    # config.environment = vec_env
-    config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
+    config.environment = vec_env
+    # config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.eval_environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.log_path = config.output_dir
     config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
@@ -75,7 +74,7 @@ if __name__ == "__main__":
     config.generate_trajectory_warmup_rounds = args.warmup
     config.debug_mode = False
     config.linear_route = False
-    config.is_vec_env = (not isinstance(config.environment, VRPTW_Environment))
+    config.is_vec_env = True
 
 
     config.hyperparameters = {
