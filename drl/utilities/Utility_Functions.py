@@ -22,7 +22,7 @@ def normalise_rewards(rewards):
 def create_actor_distribution(action_types, actor_output, action_size):
     """Creates a distribution that the actor can then use to randomly draw actions"""
     if action_types == "DISCRETE":
-        assert actor_output.size()[1] == action_size, "Actor output the wrong size"
+        assert actor_output.size(1) == action_size, f"Actor output the wrong size, action size: {action_size}, out size: {actor_output.size(1)}"
         action_distribution = Categorical(actor_output)  # this creates a distribution to sample from
     else:
         assert actor_output.size()[1] == action_size * 2, "Actor output the wrong size"

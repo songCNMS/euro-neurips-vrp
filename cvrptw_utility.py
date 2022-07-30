@@ -226,7 +226,7 @@ class MLP_RL_Model(torch.nn.Module):
     
 def get_route_mask(route_nums):
     num_samples = route_nums.size(0)
-    route_nums_np = route_nums.cpu().numpy()
+    route_nums_np = route_nums.cpu().numpy().astype(int)
     route_num_mask = np.zeros((num_samples, max_num_route))
     route_len_mask = np.zeros((num_samples, max_num_route, max_num_nodes_per_route))
     for i in range(num_samples):
@@ -256,9 +256,9 @@ class MLP_Route_RL_Model(torch.nn.Module):
 
     def forward(self, state):
         num_samples = state.size(0)
-        route_nums = state[num_samples, :max_num_route]
+        route_nums = state[:, :max_num_route]
         _, route_len_mask = get_route_mask(route_nums)
-        customers = state[num_samples, max_num_route:]
+        customers = state[:, max_num_route:]
         customers = customers.reshape(num_samples, max_num_route, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
         for i in range(max_num_route):
@@ -274,10 +274,10 @@ class MLP_Route_RL_Model(torch.nn.Module):
             node_selection_in = torch.cat((r, x_g_mean), axis=1)
             node_selection_out = self.node_selection_mlp(node_selection_in)
             node_selection_out = self.final_layer(node_selection_out)
-            node_selection_out = torch.mul(node_selection_out, route_len_mask)
+            node_selection_out = torch.mul(node_selection_out, route_len_mask[:, i, :])
             node_out.append(node_selection_out)
         node_out = torch.cat(node_out, axis=1)
-        return node_selection_out
+        return node_out
 
 
 def acc_mrse_compute(pred, label):

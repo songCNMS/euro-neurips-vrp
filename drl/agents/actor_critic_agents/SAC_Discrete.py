@@ -68,15 +68,15 @@ class SAC_Discrete(SAC):
         #     print(name, param)
         greedy_epsilon = self.start_exploration_rate - (self.episode_number*(self.end_exploration_rate - self.start_exploration_rate)) / self.config.num_episodes_to_run
         max_probability_action = torch.argmax(action_probabilities, dim=-1)
-        if random.random() >= greedy_epsilon:
-            action_distribution = create_actor_distribution(self.action_types, action_probabilities, self.action_size)
-            action = action_distribution.sample().cpu()
-        else:
-            # action_shape = (state.size(0), )
-            if len(state.shape) > 1: num_routes = state[:, 0].cpu().numpy()
-            else: num_routes = np.array([state[0]])
-            action = torch.from_numpy(np.random.randint(num_routes)).to(self.device)
-            # action = torch.randint(0, self.action_size, action_shape)
+        # if random.random() >= greedy_epsilon:
+        action_distribution = create_actor_distribution(self.action_types, action_probabilities, self.action_size)
+        action = action_distribution.sample().cpu()
+        # else:
+        #     # action_shape = (state.size(0), )
+        #     if len(state.shape) > 1: num_routes = state[:, 0].cpu().numpy()
+        #     else: num_routes = np.array([state[0]])
+        #     action = torch.from_numpy(np.random.randint(num_routes)).to(self.device)
+        #     # action = torch.randint(0, self.action_size, action_shape)
         # Have to deal with situation of 0.0 probabilities because we can't do log 0
         z = action_probabilities == 0.0
         z = z.float() * 1e-8
@@ -131,7 +131,7 @@ class SAC_Discrete(SAC):
         hyperparameters["linear_route"] = self.config.linear_route
         # if isinstance(self.environment, VRPTW_Environment): return MLP_RL_Model(hyperparameters).to(self.device)
         # else: return MLP_Route_RL_Model(hyperparameters).to(self.device)
-        return MLP_RL_Model(hyperparameters).to(self.device)
+        return MLP_Route_RL_Model(hyperparameters).to(self.device)
     
     def eval(self):
         self.eval_environment.switch_mode("eval")
