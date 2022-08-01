@@ -48,7 +48,7 @@ if __name__ == "__main__":
         config.output_dir = "./logs/"
     
     # wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
-    N_ENVS = 4
+    N_ENVS = 8
     vec_env = make_vec_env(
         lambda: VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100)),
         n_envs=N_ENVS,
@@ -173,8 +173,8 @@ if __name__ == "__main__":
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
-            "update_every_n_steps": 16, # how frequency learn is run
-            "learning_updates_per_learning_session": 8, # how many iterations per learn
+            "update_every_n_steps": 1, # how frequency learn is run
+            "learning_updates_per_learning_session": 1, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 1.0,
             "add_extra_noise": False,
