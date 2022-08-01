@@ -165,7 +165,7 @@ if __name__ == "__main__":
                 "initialiser": "Xavier"
             },
 
-            "min_steps_before_learning": 128,
+            "min_steps_before_learning": 64,
             "batch_size": 256,
             "discount_rate": 0.99,
             "mu": 0.0, #for O-H noise

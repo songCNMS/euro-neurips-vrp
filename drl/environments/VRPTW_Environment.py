@@ -117,7 +117,7 @@ class VRPTW_Environment(gym.Env):
         improvement_vec = np.zeros(max_num_nodes_per_route)
         route = self.cur_routes[self.cur_route_name]
         for node_idx in range(min(max_num_nodes_per_route, len(route))):
-            improvement_vec[node_idx] = self.get_improve(route, node_idx)
+            improvement_vec[node_idx], _ = self.get_improve(route, node_idx)
         cur_route = self.cur_routes[self.cur_route_name]
         cur_route_state = self.get_route_state(cur_route)
         cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
@@ -132,12 +132,12 @@ class VRPTW_Environment(gym.Env):
         
     def get_improve(self, route, node_idx):
         M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
-        _, _, cost_reduction =\
+        cur_routes, _, cost_reduction =\
                 heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
                                                     self.demands_dict, self.service_time_dict, 
                                                     self.earliest_start_dict, self.latest_end_dict,
                                                     self.distance_matrix_dict)
-        return self.reward_shaping(cost_reduction)
+        return self.reward_shaping(cost_reduction), cur_routes
     
     def reward_shaping(self, cost_reduction):
         return max(0.0, (-1.0 if (cost_reduction is None) else 100*cost_reduction / self.max_distance))
@@ -148,15 +148,8 @@ class VRPTW_Environment(gym.Env):
         assert node_idx < len(route), f"state: {self.state[0]}, node: {node_idx}, route: {len(route)}"
         self.cur_step += 1
         self.steps_not_improved += 1
-        M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
-        new_routes, ori_total_cost, cost_reduction =\
-                heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
-                                                      self.demands_dict, self.service_time_dict, 
-                                                      self.earliest_start_dict, self.latest_end_dict,
-                                                      self.distance_matrix_dict)
-        self.reward = self.reward_shaping(cost_reduction)
+        self.reward, self.cur_routes = self.get_improve(route, node_idx)
         if self.reward > 0: self.steps_not_improved = 0
-        self.cur_routes = new_routes
         self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         while True:
             self.cur_route_name = self.route_name_list[self.cur_route_idx]

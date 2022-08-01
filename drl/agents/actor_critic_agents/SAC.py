@@ -85,6 +85,7 @@ class SAC(Base_Agent):
         eval_ep = (self.episode_number+1) % TRAINING_EPISODES_PER_EVAL_EPISODE == 0 and self.do_evaluation_iterations
         self.episode_step_number_val = 0
         _done = False
+        self.actor_local.exploration_rate = min(1.0, self.actor_local.exploration_rate+self.actor_local.rate_delta)
         while not _done:
             self.episode_step_number_val += 1
             if self.is_vec_env: self.action = np.array([self.pick_action(eval_ep, state=state) for i, state in enumerate(self.state)])
