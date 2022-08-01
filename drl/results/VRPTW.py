@@ -47,15 +47,15 @@ if __name__ == "__main__":
         config.data_dir = "./"
         config.output_dir = "./logs/"
     
-    wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
+    # wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
     N_ENVS = 4
     vec_env = make_vec_env(
-        lambda: wrappable_env,
+        lambda: VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100)),
         n_envs=N_ENVS,
         vec_env_cls=DummyVecEnv
     )
-    # config.environment = vec_env
-    config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
+    config.environment = vec_env
+    # config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.eval_environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.log_path = config.output_dir
     config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     config.generate_trajectory_warmup_rounds = args.warmup
     config.debug_mode = False
     config.linear_route = False
-    config.is_vec_env = (not isinstance(config.environment, VRPTW_Environment))
+    config.is_vec_env = True
 
 
     config.hyperparameters = {
@@ -134,9 +134,9 @@ if __name__ == "__main__":
 
         "Actor_Critic_Agents":  {
             "learning_rate": 0.001,
-            "linear_hidden_units": [256, 128],
+            "linear_hidden_units": [128, 128],
             "gradient_clipping_norm": 1.0,
-            "discount_rate": 0.99,
+            "discount_rate": 1.0,
             "epsilon_decay_rate_denominator": 1.0,
             "normalise_rewards": True,
             "exploration_worker_difference": 2.0,
@@ -144,7 +144,7 @@ if __name__ == "__main__":
 
             "Actor": {
                 "learning_rate": 0.001,
-                "linear_hidden_units": [256, 128],
+                "linear_hidden_units": [128, 128],
                 "hidden_activations": "relu",
                 "final_layer_activation": "Softmax",
                 "batch_norm": False,

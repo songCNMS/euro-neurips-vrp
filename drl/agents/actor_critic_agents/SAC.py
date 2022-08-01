@@ -5,6 +5,7 @@ from torch.optim import Adam
 import torch
 import torch.nn.functional as F
 from torch.distributions import Normal
+from cvrptw_utility import max_num_nodes_per_route
 import numpy as np
 import os
 
@@ -118,12 +119,12 @@ class SAC(Base_Agent):
         if state is None: state = self.state
         if eval_ep: action = self.actor_pick_action(state=state, eval=True)
         elif self.global_step_number < self.hyperparameters["min_steps_before_learning"]:
-            if len(state.shape) > 1:
-                num_routes = state[:, 0].astype(int)
-            else:
-                num_routes = np.array([state[0]]).astype(int)
-            action = np.random.randint(num_routes)
-            action = action[0]
+            num_routes = int(state[0])
+            cost_improve_vec = np.array(state[1:1+max_num_nodes_per_route])[:num_routes]
+            cost_sum = np.sum(cost_improve_vec)
+            if cost_sum > 0.0: node_prob = [c/cost_sum for c in cost_improve_vec]
+            else: node_prob = None
+            action = np.random.choice(range(num_routes), p=node_prob)
             # action = self.environment.action_space.sample()
             print("Picking random action ", action)
         else: action = self.actor_pick_action(state=state)

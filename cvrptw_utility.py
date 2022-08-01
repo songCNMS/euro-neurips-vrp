@@ -7,7 +7,7 @@ from nn_builder.pytorch.NN import NN
 
 route_output_dim = 64
 max_num_route = 40
-max_num_nodes_per_route = 30
+max_num_nodes_per_route = 24
 depot = "Customer_0"
 feature_dim = 7 # (service_time, earlieast_time, latest_time, demand, dist_to_depot, x, y)
 selected_nodes_num = 900
@@ -199,11 +199,12 @@ class MLP_RL_Model(torch.nn.Module):
     def forward(self, state):
         num_samples = state.size(0)
         route_len = state[:, 0].cpu().numpy().astype(int)
+        route_cost_mask = state[:, 1:1+max_num_nodes_per_route]
         route_len_mask = np.zeros((num_samples, max_num_nodes_per_route))
         for i in range(num_samples):
             route_len_mask[i, :route_len[i]] = 1.0
         route_len_mask = torch.from_numpy(route_len_mask).to(device)
-        state = state[:, 1:].reshape(num_samples, max_num_route+1, max_num_nodes_per_route*feature_dim)
+        state = state[:, 1+max_num_nodes_per_route:].reshape(num_samples, max_num_route+1, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
         if self.mlp_route: x_cr = self.route_model(state[:, 0, :])
         else:
@@ -220,8 +221,9 @@ class MLP_RL_Model(torch.nn.Module):
         x_r = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
         x = torch.cat((x_cr, x_r), axis=1)
         x = self.mlp(x)
-        x = 10*self.final_layer(x)
+        x = self.final_layer(x)
         out = torch.mul(x, route_len_mask)
+        out = torch.add(x, 5*route_cost_mask)
         return out
     
 def get_route_mask(route_nums):

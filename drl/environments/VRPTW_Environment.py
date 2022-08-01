@@ -1,5 +1,6 @@
 import random
 import os
+import math
 from collections import namedtuple
 import gym
 import numpy as np
@@ -10,7 +11,6 @@ import tools
 from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check, heuristic_improvement_with_candidates, compute_route_cost
 from cvrptw_utility import depot, device, feature_dim, max_num_nodes_per_route, max_num_route, route_output_dim, selected_nodes_num, extract_features_for_nodes, extend_candidate_points
 from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
-
 
 
 class VRPTW_Environment(gym.Env):
@@ -25,12 +25,12 @@ class VRPTW_Environment(gym.Env):
         self.cur_step = 0
         self._max_episode_steps = max_num_nodes_per_route*max_num_route
         self.max_episode_steps = self._max_episode_steps
-        self.early_stop_steps = max_num_route
+        self.early_stop_steps = 10
         self.steps_not_improved = 0
         self.trials = 10
         self.reward_threshold = float("inf")
         self.id = "VRPTW"
-        self.num_states = 1+(max_num_route+1)*max_num_nodes_per_route*feature_dim
+        self.num_states = 1+max_num_nodes_per_route+(max_num_route+1)*max_num_nodes_per_route*feature_dim
         self.observation_space = spaces.Box(
             low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
@@ -114,6 +114,10 @@ class VRPTW_Environment(gym.Env):
         return route_state
             
     def get_state(self):
+        improvement_vec = np.zeros(max_num_nodes_per_route)
+        route = self.cur_routes[self.cur_route_name]
+        for node_idx in range(len(route)):
+            improvement_vec[node_idx] = self.get_improve(route, node_idx)
         cur_route = self.cur_routes[self.cur_route_name]
         cur_route_state = self.get_route_state(cur_route)
         cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
@@ -123,9 +127,21 @@ class VRPTW_Environment(gym.Env):
             route = self.cur_routes[route_name]
             cur_routes_encode_state[i+1, :] = self.get_route_state(route)
         state = cur_routes_encode_state.reshape(-1)
-        state = np.concatenate(([len(cur_route)], state), axis=0)
+        state = np.concatenate(([len(cur_route)], improvement_vec, state), axis=0)
         return state
         
+    def get_improve(self, route, node_idx):
+        M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
+        _, _, cost_reduction =\
+                heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
+                                                    self.demands_dict, self.service_time_dict, 
+                                                    self.earliest_start_dict, self.latest_end_dict,
+                                                    self.distance_matrix_dict)
+        return self.reward_shaping(cost_reduction)
+    
+    def reward_shaping(self, cost_reduction):
+        return max(0.0, (-1.0 if (cost_reduction is None) else 100*cost_reduction / self.max_distance))
+
     def step(self, action):
         node_idx = action
         route = self.cur_routes[self.cur_route_name]
@@ -135,17 +151,17 @@ class VRPTW_Environment(gym.Env):
         M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
         new_routes, ori_total_cost, cost_reduction =\
                 heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
-                                                        self.demands_dict, self.service_time_dict, 
-                                                        self.earliest_start_dict, self.latest_end_dict,
-                                                        self.distance_matrix_dict)
-        if (cost_reduction is not None) and cost_reduction > 0: self.steps_not_improved = 0
-        self.reward = (-1.0 if cost_reduction is None else 100*cost_reduction / self.max_distance)
+                                                      self.demands_dict, self.service_time_dict, 
+                                                      self.earliest_start_dict, self.latest_end_dict,
+                                                      self.distance_matrix_dict)
+        self.reward = self.reward_shaping(cost_reduction)
+        if self.reward > 0: self.steps_not_improved = 0
         self.cur_routes = new_routes
-        if self.reward <= 0.0:
-            while True:
-                self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
-                self.cur_route_name = self.route_name_list[self.cur_route_idx]
-                if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
+        self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
+        while True:
+            self.cur_route_name = self.route_name_list[self.cur_route_idx]
+            if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
+            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
         return self.state, self.reward, self.done, {}
