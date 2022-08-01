@@ -90,9 +90,6 @@ class SAC(Base_Agent):
             if self.is_vec_env: self.action = np.array([self.pick_action(eval_ep, state=state) for i, state in enumerate(self.state)])
             else: self.action = self.pick_action(eval_ep)
             self.conduct_action(self.action)
-            # if eval_ep:
-            #     print("state: ", self.environment.state)
-            #     print(f"step: {self.environment.local_env.cur_step}, action: {self.action}, reward: {self.environment.reward}, rep: {self.environment.local_env.cur_replenish_amount}, instock: {self.environment.local_env.in_stocks}, sales: {self.environment.local_env.cur_sales}, demand: {self.environment.local_env.cur_demand}")
             if self.time_for_critic_and_actor_to_learn():
                 for _ in range(self.hyperparameters["learning_updates_per_learning_session"]):
                     self.learn()
