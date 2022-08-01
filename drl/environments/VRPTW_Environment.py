@@ -116,7 +116,7 @@ class VRPTW_Environment(gym.Env):
     def get_state(self):
         improvement_vec = np.zeros(max_num_nodes_per_route)
         route = self.cur_routes[self.cur_route_name]
-        for node_idx in range(len(route)):
+        for node_idx in range(min(max_num_nodes_per_route, len(route))):
             improvement_vec[node_idx] = self.get_improve(route, node_idx)
         cur_route = self.cur_routes[self.cur_route_name]
         cur_route_state = self.get_route_state(cur_route)

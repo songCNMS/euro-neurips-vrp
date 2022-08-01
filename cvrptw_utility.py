@@ -222,8 +222,8 @@ class MLP_RL_Model(torch.nn.Module):
         x = torch.cat((x_cr, x_r), axis=1)
         x = self.mlp(x)
         x = self.final_layer(x)
+        x = torch.add(x, 5*route_cost_mask)
         out = torch.mul(x, route_len_mask)
-        out = torch.add(x, 5*route_cost_mask)
         return out
     
 def get_route_mask(route_nums):
