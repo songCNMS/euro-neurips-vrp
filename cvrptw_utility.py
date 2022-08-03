@@ -187,9 +187,9 @@ class MLP_RL_Model(torch.nn.Module):
         if self.mlp_route: self.route_model = Route_MLP_Model()
         else: self.route_model = Route_Model()
         self.final_layer = torch.nn.Softmax(dim=1)
-        self.exploration_rate = 0.05
+        self.exploration_rate = 1.0
         self.rate_delta = 0.01
-        self.mlp = NN(input_dim=route_output_dim*2, 
+        self.mlp = NN(input_dim=max_num_nodes_per_route+route_output_dim*2, 
                       layers_info=hyperparameters["linear_hidden_units"] + [hyperparameters["output_dim"]],
                       output_activation=None,
                       batch_norm=hyperparameters["batch_norm"], dropout=hyperparameters["dropout"],
@@ -221,7 +221,7 @@ class MLP_RL_Model(torch.nn.Module):
                 x_r = x_r[-1, :, :]
             route_rnn_output_list.append(x_r)
         x_r = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
-        x = torch.cat((x_cr, x_r), axis=1)
+        x = torch.cat((route_cost_mask, x_cr, x_r), axis=1)
         x = self.mlp(x)
         x = self.final_layer(x)
         x = torch.add(x, self.exploration_rate*route_cost_mask)

@@ -11,6 +11,7 @@ from agents.actor_critic_agents.SAC import SAC
 from utilities.Utility_Functions import create_actor_distribution
 from cvrptw_utility import MLP_RL_Model, MLP_Route_RL_Model
 import wandb
+import pandas as pd
 import os
 import random
 torch.autograd.set_detect_anomaly(False)
@@ -134,14 +135,17 @@ class SAC_Discrete(SAC):
     def eval(self):
         self.eval_environment.switch_mode("eval")
         total_reward = 0.0
+        hybrid_res_df = pd.read_csv("./hybrid_ortec.csv")
+        hybrid_res = {row['problem']: row['total_cost'] for _, row in hybrid_res_df.iterrows()}
         dir_name = os.path.dirname(f"{self.eval_environment.data_dir}/cvrp_benchmarks/homberger_{self.eval_environment.instance}_customer_instances/")
         problem_list = sorted(os.listdir(dir_name))
         # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
         # problem_list = ["ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"]
         eval_rounds = min(5, len(problem_list))
-        init_cost, final_cost = 0.0, 0.0
+        init_cost, final_cost, hybrid_cost = 0.0, 0.0, 0.0
         for i in range(eval_rounds):
             problem = problem_list[i]
+            hybrid_cost += hybrid_res[problem]
             state = self.eval_environment.reset(problem_file=problem)
             init_cost += self.eval_environment.init_total_cost
             done = False
@@ -155,17 +159,18 @@ class SAC_Discrete(SAC):
             total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()
         self.eval_environment.switch_mode("train")    
-        return total_reward/eval_rounds, init_cost/eval_rounds, final_cost/eval_rounds
+        return total_reward/eval_rounds, init_cost/eval_rounds, final_cost/eval_rounds, hybrid_cost/eval_rounds
     
     def print_summary_of_latest_evaluation_episode(self):
         """Prints a summary of the latest episode"""
         print(" ")
         print("----------------------------")
         print("Episode score {} ".format(self.total_episode_score_so_far))
-        total_reward, init_cost, final_cost = self.eval()
+        total_reward, init_cost, final_cost, hybrid_cost = self.eval()
         wandb.log({"cost_reduction": total_reward,
                    "init_cost": init_cost,
-                   "final_cost": final_cost})
+                   "final_cost": final_cost,
+                   "hybrid_cost": hybrid_cost})
         self.eval_reward_list.append(total_reward)
         print("Eval reward {}, best reward {} ".format(total_reward, np.max(self.eval_reward_list)))
         print("History rewards: ", self.eval_reward_list)

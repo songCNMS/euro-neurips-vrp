@@ -118,6 +118,8 @@ class VRPTW_Environment(gym.Env):
         route = self.cur_routes[self.cur_route_name]
         for node_idx in range(min(max_num_nodes_per_route, len(route))):
             improvement_vec[node_idx], _ = self.get_improve(route, node_idx)
+        max_improvement, min_improvement = np.max(improvement_vec), np.min(improvement_vec)
+        if max_improvement - min_improvement > 0.0: improvement_vec = (improvement_vec-min_improvement) / (max_improvement - min_improvement)
         cur_route = self.cur_routes[self.cur_route_name]
         cur_route_state = self.get_route_state(cur_route)
         cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
