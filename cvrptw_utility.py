@@ -224,7 +224,7 @@ class MLP_RL_Model(torch.nn.Module):
         x = torch.cat((route_cost_mask, x_cr, x_r), axis=1)
         x = self.mlp(x)
         x = self.final_layer(x)
-        x = torch.add(x, self.exploration_rate*route_cost_mask)
+        # x = torch.add(x, self.exploration_rate*route_cost_mask)
         out = torch.mul(x, route_len_mask)
         return out
     

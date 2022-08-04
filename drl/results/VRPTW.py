@@ -35,6 +35,7 @@ if __name__ == "__main__":
     parser.add_argument('--cuda', metavar='C', type=int, help='CUDA Device ID')
     parser.add_argument('--warmup', type=int, help='warm up rounds before training')
     parser.add_argument('--instance', type=str, default="ortec")
+    parser.add_argument('--exp_name', type=str, default="exp")
     parser.add_argument("--remote", action="store_true")
     args = parser.parse_args()
 
@@ -189,7 +190,7 @@ if __name__ == "__main__":
     #           DDQN_With_Prioritised_Experience_Replay, A2C, PPO, A3C ]
     AGENTS = [SAC_Discrete]
     exp_name = datetime.now().strftime("%m%d-%H%M")
-    if not config.linear_route: exp_name += f'_GRU_{AGENTS[0].agent_name}'
+    if not config.linear_route: exp_name += f'_GRU_{AGENTS[0].agent_name}_{args.exp_name}'
     wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=exp_name, group=f"{platform.node()}")
     trainer = Trainer(config, AGENTS)
     trainer.run_games_for_agents()
