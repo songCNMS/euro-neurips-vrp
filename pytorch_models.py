@@ -128,7 +128,7 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
             path_name = f"PATH{i}"
             cur_routes[path_name] = [f"Customer_{c}" for c in route]
     solution_file_name = f"./cvrp_benchmarks/RL_train_data/{problem_name}.npy"
-    np.save(solution_file_name, np.array(init_routes, dtype=int))
+    np.save(solution_file_name, np.array(init_routes))
     cost_list = [total_cost]
     candidate_features_list = []
     customer_features_list = []

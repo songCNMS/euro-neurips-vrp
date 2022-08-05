@@ -6,7 +6,7 @@ from nn_builder.pytorch.NN import NN
 
 
 route_output_dim = 64
-max_num_route = 40
+max_num_route = 48
 max_num_nodes_per_route = 24
 depot = "Customer_0"
 feature_dim = 7 # (service_time, earlieast_time, latest_time, demand, dist_to_depot, x, y)

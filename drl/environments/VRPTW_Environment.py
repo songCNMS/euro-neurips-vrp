@@ -126,6 +126,7 @@ class VRPTW_Environment(gym.Env):
         cur_routes_encode_state[0, :] = cur_route_state
         for i, route_name in enumerate(self.route_name_list):
             if route_name not in self.cur_routes: continue
+            if i+1 > max_num_route: break
             route = self.cur_routes[route_name]
             cur_routes_encode_state[i+1, :] = self.get_route_state(route)
         state = cur_routes_encode_state.reshape(-1)
