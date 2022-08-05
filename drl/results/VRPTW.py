@@ -156,11 +156,11 @@ if __name__ == "__main__":
 
             "Critic": {
                 "learning_rate": 0.003,
-                "linear_hidden_units": [256, 128],
+                "linear_hidden_units": [128, 128],
                 "hidden_activations": "relu",
                 "final_layer_activation": None,
                 "batch_norm": False,
-                "buffer_size": 100000,
+                "buffer_size": 10000000,
                 "tau": 0.001,
                 "gradient_clipping_norm": 5.0,
                 "initialiser": "Xavier"

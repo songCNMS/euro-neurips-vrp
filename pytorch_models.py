@@ -109,7 +109,7 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
                                                     earliest_start, latest_end, max_horizon,
                                                     distance_warehouses, distance_matrix)
     
-    num_episodes = 10
+    num_episodes = 0
     early_stop_rounds = 10
     init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
     # if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
@@ -128,7 +128,7 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
             path_name = f"PATH{i}"
             cur_routes[path_name] = [f"Customer_{c}" for c in route]
     solution_file_name = f"./cvrp_benchmarks/RL_train_data/{problem_name}.npy"
-    np.save(solution_file_name, np.array(init_routes))
+    np.save(solution_file_name, np.array(init_routes, dtype=int))
     cost_list = [total_cost]
     candidate_features_list = []
     customer_features_list = []
@@ -151,14 +151,16 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
         customer_features_list.append(other_customers_features)
         if len(cost_list) > early_stop_rounds and np.min(cost_list[-early_stop_rounds:]) >= np.min(cost_list[:-early_stop_rounds]):
             break
-    candidate_features = np.concatenate(candidate_features_list, axis=0)
-    customer_features = np.concatenate(customer_features_list, axis=0)
-    cost_improvements = np.array(cost_improvement_list)
-    os.makedirs(f"{output_dir}/predict_data", exist_ok=True)
-    np.save(file_name+".candidates", candidate_features, allow_pickle=False)
-    np.save(file_name+".customers", customer_features, allow_pickle=False)
-    np.save(file_name+".cost", cost_improvements, allow_pickle=False)
-    return candidate_features, customer_features, cost_improvements
+    if num_episodes > 0:
+        candidate_features = np.concatenate(candidate_features_list, axis=0)
+        customer_features = np.concatenate(customer_features_list, axis=0)
+        cost_improvements = np.array(cost_improvement_list)
+        os.makedirs(f"{output_dir}/predict_data", exist_ok=True)
+        np.save(file_name+".candidates", candidate_features, allow_pickle=False)
+        np.save(file_name+".customers", customer_features, allow_pickle=False)
+        np.save(file_name+".cost", cost_improvements, allow_pickle=False)
+        return candidate_features, customer_features, cost_improvement
+    else: return None, None, None
 
 def get_local_features(folder_name, eval=False):
     if os.path.exists(f"{folder_name}/all_data.candidates.npy"):
@@ -221,7 +223,7 @@ if __name__ == '__main__':
         output_dir = "./"
 
     # instance_list = ["200", "400", "600", "800", "1000", "ortec"]
-    instance_list = ["ortec"]
+    instance_list = ["400"]
     max_exp_round = 50
     all_experiments_list = []
     for exp_round in range(1, max_exp_round+1):
