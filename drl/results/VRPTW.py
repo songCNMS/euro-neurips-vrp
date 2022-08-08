@@ -176,8 +176,8 @@ if __name__ == "__main__":
             "action_noise_clipping_range": 0.5,  # for TD3
             "update_every_n_steps": 1, # how frequency learn is run
             "learning_updates_per_learning_session": 8, # how many iterations per learn
-            "automatically_tune_entropy_hyperparameter": True,
-            "entropy_term_weight": 1.0,
+            "automatically_tune_entropy_hyperparameter": False,
+            "entropy_term_weight": 0.5,
             "add_extra_noise": False,
             "do_evaluation_iterations": True,
             "greedy_exploration": True,

@@ -93,7 +93,6 @@ class SAC_Discrete(SAC):
             min_qf_next_target = action_probabilities * (torch.min(qf1_next_target, qf2_next_target) - self.alpha * log_action_probabilities)
             min_qf_next_target = min_qf_next_target.sum(dim=1).unsqueeze(-1)
             next_q_value = reward_batch + (1.0 - mask_batch) * self.hyperparameters["discount_rate"] * (min_qf_next_target)
-        assert torch.isfinite(reward_batch).all(), f"reward: {reward_batch}"
         qf1 = self.critic_local(state_batch).gather(1, action_batch.long())
         qf2 = self.critic_local_2(state_batch).gather(1, action_batch.long())
         qf1_loss = F.mse_loss(qf1, next_q_value)
@@ -156,7 +155,6 @@ class SAC_Discrete(SAC):
                 state, reward, done, _ = self.eval_environment.step(action)
                 print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
                 _total_reward += reward
-            # _total_reward /= (self.eval_environment.cur_step+1)
             total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()
         self.eval_environment.switch_mode("train")    
