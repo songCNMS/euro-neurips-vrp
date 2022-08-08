@@ -135,7 +135,7 @@ class SAC_Discrete(SAC):
     def eval(self):
         self.eval_environment.switch_mode("eval")
         total_reward = 0.0
-        hybrid_res_df = pd.read_csv(f"./amlt/vrptw_hybrid_ges_240/vrptw_{self.eval_environment.instance}/hybrid_res.csv")
+        hybrid_res_df = pd.read_csv(f"./amlt/vrptw_hybrid_ges_only_240/vrptw_{self.eval_environment.instance}/hybrid_res.csv")
         hybrid_res = {row['problem']: row['total_cost'] for _, row in hybrid_res_df.iterrows()}
         dir_name = os.path.dirname(f"{self.eval_environment.data_dir}/cvrp_benchmarks/homberger_{self.eval_environment.instance}_customer_instances/")
         problem_list = sorted(os.listdir(dir_name))

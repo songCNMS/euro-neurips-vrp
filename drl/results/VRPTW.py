@@ -134,7 +134,7 @@ if __name__ == "__main__":
         },
 
         "Actor_Critic_Agents":  {
-            "learning_rate": 0.001,
+            "learning_rate": 0.0003,
             "linear_hidden_units": [128, 128],
             "gradient_clipping_norm": 1.0,
             "discount_rate": 1.0,
@@ -144,24 +144,24 @@ if __name__ == "__main__":
             "clip_rewards": False,
 
             "Actor": {
-                "learning_rate": 0.001,
+                "learning_rate": 0.0001,
                 "linear_hidden_units": [128, 128],
-                "hidden_activations": "relu",
+                "hidden_activations": "tanh",
                 "final_layer_activation": "Softmax",
                 "batch_norm": False,
-                "tau": 0.001,
+                "tau": 0.01,
                 "gradient_clipping_norm": 5.0,
                 "initialiser": "Xavier"
             },
 
             "Critic": {
-                "learning_rate": 0.003,
+                "learning_rate": 0.0003,
                 "linear_hidden_units": [128, 128],
-                "hidden_activations": "relu",
+                "hidden_activations": "tanh",
                 "final_layer_activation": None,
                 "batch_norm": False,
                 "buffer_size": 10000000,
-                "tau": 0.001,
+                "tau": 0.01,
                 "gradient_clipping_norm": 5.0,
                 "initialiser": "Xavier"
             },
@@ -175,7 +175,7 @@ if __name__ == "__main__":
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
             "update_every_n_steps": 1, # how frequency learn is run
-            "learning_updates_per_learning_session": 1, # how many iterations per learn
+            "learning_updates_per_learning_session": 8, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 1.0,
             "add_extra_noise": False,

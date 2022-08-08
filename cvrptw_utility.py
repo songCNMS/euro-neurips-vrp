@@ -5,8 +5,8 @@ import math
 from nn_builder.pytorch.NN import NN
 
 
-route_output_dim = 64
-max_num_route = 48
+route_output_dim = 128
+max_num_route = 40
 max_num_nodes_per_route = 24
 node_embedding_dim = 32
 depot = "Customer_0"
@@ -115,9 +115,9 @@ else: device = "cpu"
 class Customer_Model(torch.nn.Module):
     def __init__(self):
         super(Customer_Model, self).__init__()
-        self.output_dim = 16
+        self.output_dim = 32
         self.mlp = NN(input_dim=feature_dim, 
-                     layers_info=[32, 32, self.output_dim],
+                     layers_info=[128, self.output_dim],
                      output_activation="relu",
                      hidden_activations="relu", initialiser="Xavier")
     
@@ -146,7 +146,7 @@ class Route_MLP_Model(torch.nn.Module):
     def __init__(self):
         super(Route_MLP_Model, self).__init__()
         self.mlp = NN(input_dim=max_num_nodes_per_route*feature_dim, 
-                     layers_info=[256, 128, route_output_dim],
+                     layers_info=[256, 256, route_output_dim],
                      output_activation="tanh",
                      hidden_activations="tanh", initialiser="Xavier")
     
@@ -159,8 +159,8 @@ class MLP_Model(torch.nn.Module):
         super(MLP_Model, self).__init__()
         self.route_model = Route_Model()
         self.candidate_model = torch.nn.Linear(2*feature_dim, 64)
-        self.fc1 = torch.nn.Linear(route_output_dim+64, 256)
-        self.fc2 = torch.nn.Linear(256, 128)
+        self.fc1 = torch.nn.Linear(route_output_dim+64, 128)
+        self.fc2 = torch.nn.Linear(128, 128)
         self.fc3 = torch.nn.Linear(128, 1)
         self.dropout = torch.nn.Dropout(p=0.2)
         torch.nn.init.xavier_uniform_(self.fc1.weight)
