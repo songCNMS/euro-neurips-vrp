@@ -147,10 +147,11 @@ class VRPTW_Environment(gym.Env):
                                                     self.demands_dict, self.service_time_dict, 
                                                     self.earliest_start_dict, self.latest_end_dict,
                                                     self.distance_matrix_dict)
+        # cost_reduction - positive: shorter path, negative: longer path (not improved)
         return self.reward_shaping(cost_reduction), cur_routes
     
     def reward_shaping(self, cost_reduction):
-        return max(0.0, (-1.0 if (cost_reduction is None) else 100*cost_reduction / self.max_distance))
+        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction / self.max_distance)
 
     def step(self, action):
         node_idx = action
@@ -167,6 +168,8 @@ class VRPTW_Environment(gym.Env):
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
+        if self.done: self.reward = -self.reward_shaping(self.get_route_cost())
+        elif self.reward > 0.0: self.reward = -self.reward
         return self.state, self.reward, self.done, {}
 
     def switch_mode(self, mode):

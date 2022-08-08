@@ -16,6 +16,7 @@ import os
 import random
 torch.autograd.set_detect_anomaly(False)
 
+
 class SAC_Discrete(SAC):
     """The Soft Actor Critic for discrete actions. It inherits from SAC for continuous actions and only changes a few
     methods."""
@@ -154,7 +155,7 @@ class SAC_Discrete(SAC):
                 action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
                 print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
-                if reward > 0.0: _total_reward += reward
+                _total_reward += reward
             # _total_reward /= (self.eval_environment.cur_step+1)
             total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()

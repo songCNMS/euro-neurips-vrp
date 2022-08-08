@@ -8,6 +8,8 @@ from torch.distributions import Normal
 from cvrptw_utility import max_num_nodes_per_route
 import numpy as np
 import os
+import wandb
+
 
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
@@ -172,9 +174,16 @@ class SAC(Base_Agent):
         self.update_critic_parameters(qf1_loss, qf2_loss)
 
         policy_loss, log_pi = self.calculate_actor_loss(state_batch)
-        if self.automatic_entropy_tuning: alpha_loss = self.calculate_entropy_tuning_loss(log_pi)
+        res = {"memory_size": len(self.memory),
+               "qf1_loss": qf1_loss.item(),
+               "qf2_loss": qf2_loss.item(),
+               "policy_loss": policy_loss.item()}
+        if self.automatic_entropy_tuning: 
+            alpha_loss = self.calculate_entropy_tuning_loss(log_pi)
+            res["alpha_loss"] = alpha_loss.item()
         else: alpha_loss = None
         self.update_actor_parameters(policy_loss, alpha_loss)
+        wandb.log(res)
 
     def sample_experiences(self):
         return  self.memory.sample()
