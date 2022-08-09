@@ -160,24 +160,24 @@ if __name__ == "__main__":
                 "hidden_activations": "tanh",
                 "final_layer_activation": None,
                 "batch_norm": False,
-                "buffer_size": 10000000,
+                "buffer_size": 51200,
                 "tau": 0.01,
                 "gradient_clipping_norm": 5.0,
                 "initialiser": "Xavier"
             },
 
             "min_steps_before_learning": 64,
-            "batch_size": 256,
+            "batch_size": 512,
             "discount_rate": 0.99,
             "mu": 0.0, #for O-H noise
             "theta": 0.15, #for O-H noise
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
-            "update_every_n_steps": 1, # how frequency learn is run
-            "learning_updates_per_learning_session": 8, # how many iterations per learn
+            "update_every_n_steps": 8, # how frequency learn is run
+            "learning_updates_per_learning_session": 1, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": False,
-            "entropy_term_weight": 0.5,
+            "entropy_term_weight": 1.0,
             "add_extra_noise": False,
             "do_evaluation_iterations": True,
             "greedy_exploration": True,

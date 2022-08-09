@@ -113,7 +113,9 @@ class SAC_Discrete(SAC):
     def create_NN(self, input_dim, output_dim, key_to_use=None, override_seed=None, hyperparameters=None):
         """Creates a neural network for the agents to use"""
         if hyperparameters is None: hyperparameters = self.hyperparameters
-        if key_to_use: hyperparameters = hyperparameters[key_to_use]
+        if key_to_use:
+            hyperparameters = hyperparameters[key_to_use]
+            hyperparameters['key_to_use'] = key_to_use
         if override_seed: hyperparameters["seed"] = override_seed
         else: hyperparameters["seed"] = self.config.seed
         default_hyperparameter_choices = {"output_activation": None, "hidden_activations": "relu", "dropout": 0.0,
