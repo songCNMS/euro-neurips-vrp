@@ -44,7 +44,7 @@ if __name__ == "__main__":
     dir_name = os.path.dirname(f"{data_dir}/cvrp_benchmarks/homberger_{args.instance}_customer_instances/")
     problem_list = sorted(os.listdir(dir_name))
     res_file_name = f"{output_dir}/ges_res_{args.instance}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-    sota_res = pd.read_csv("sota_res.csv")
+    sota_res = pd.read_csv("hybrid_res/sota_res.csv")
     sota_res_dict = {row["problem"]: (row["distance"], row["vehicle"]) for _, row in sota_res.iterrows()}
     result_list = []
     for problem in problem_list:

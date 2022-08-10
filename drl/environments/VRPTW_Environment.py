@@ -168,7 +168,7 @@ class VRPTW_Environment(gym.Env):
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
-        if self.done: self.reward = 50.0-self.reward_shaping(self.get_route_cost())
+        if self.done: self.reward = -self.reward_shaping(self.get_route_cost())
         else: self.reward = -self.reward
         return self.state, self.reward, self.done, {}
 

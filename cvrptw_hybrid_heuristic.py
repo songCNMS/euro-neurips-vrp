@@ -167,7 +167,7 @@ if __name__ == '__main__':
     else:
         data_dir = "./"
         output_dir = "./"
-    sota_res = pd.read_csv("sota_res.csv")
+    sota_res = pd.read_csv("hybrid_res/sota_res.csv")
     sota_res_dict = {row["problem"]: (row["distance"], row["vehicle"]) for _, row in sota_res.iterrows()}
     manager = mp.Manager()
     round_res_dict = manager.dict()
