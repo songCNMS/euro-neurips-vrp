@@ -127,13 +127,9 @@ def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity,
                                           distance_matrix):
     ori_total_cost = compute_route_cost(cur_routes, distance_matrix)
     routes_before_insert = {}
-    # print("ori routes: ", cur_routes)
     for route_name, route in cur_routes.items():
         new_route = [c for c in route if c not in customers]
         if len(new_route) > 0: routes_before_insert[route_name] = new_route
-    # print("selected customers: ", customers)
-    # print("after routes: ", routes_before_insert)
-    total_cost_before_insert = compute_route_cost(routes_before_insert, distance_matrix)
     customer_to_route_dict = {}
     for c in customers:
         route_cost_list = sorted([(route_name, route_insertion_cost(route, c, service_time, 

@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
         "Actor_Critic_Agents":  {
             "learning_rate": 0.0003,
-            "linear_hidden_units": [128, 128],
+            "linear_hidden_units": [256, 256],
             "gradient_clipping_norm": 1.0,
             "discount_rate": 1.0,
             "epsilon_decay_rate_denominator": 1.0,
@@ -144,9 +144,9 @@ if __name__ == "__main__":
             "clip_rewards": False,
 
             "Actor": {
-                "learning_rate": 0.0001,
-                "linear_hidden_units": [128, 128],
-                "hidden_activations": "tanh",
+                "learning_rate": 0.001,
+                "linear_hidden_units": [256, 256],
+                "hidden_activations": "relu",
                 "final_layer_activation": "Softmax",
                 "batch_norm": False,
                 "tau": 0.01,
@@ -155,9 +155,9 @@ if __name__ == "__main__":
             },
 
             "Critic": {
-                "learning_rate": 0.0003,
-                "linear_hidden_units": [128, 128],
-                "hidden_activations": "tanh",
+                "learning_rate": 0.003,
+                "linear_hidden_units": [256, 256],
+                "hidden_activations": "relu",
                 "final_layer_activation": None,
                 "batch_norm": False,
                 "buffer_size": 51200,
@@ -168,7 +168,7 @@ if __name__ == "__main__":
 
             "min_steps_before_learning": 64,
             "batch_size": 512,
-            "discount_rate": 0.99,
+            "discount_rate": 1.0,
             "mu": 0.0, #for O-H noise
             "theta": 0.15, #for O-H noise
             "sigma": 0.25, #for O-H noise
@@ -177,7 +177,7 @@ if __name__ == "__main__":
             "update_every_n_steps": 8, # how frequency learn is run
             "learning_updates_per_learning_session": 1, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": False,
-            "entropy_term_weight": 1.0,
+            "entropy_term_weight": 2.0,
             "add_extra_noise": False,
             "do_evaluation_iterations": True,
             "greedy_exploration": True,

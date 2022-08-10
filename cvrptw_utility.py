@@ -118,8 +118,8 @@ class Customer_Model(torch.nn.Module):
         self.output_dim = 32
         self.mlp = NN(input_dim=feature_dim, 
                      layers_info=[128, self.output_dim],
-                     output_activation="relu",
-                     hidden_activations="relu", initialiser="Xavier")
+                     output_activation="tanh",
+                     hidden_activations="tanh", initialiser="Xavier")
     
     def forward(self, x):
         return self.mlp(x)
@@ -193,7 +193,7 @@ class MLP_RL_Model(torch.nn.Module):
         self.final_layer = torch.nn.Softmax(dim=1)
         self.exploration_rate = 1.0
         self.rate_delta = 0.01
-        input_dim = max_num_nodes_per_route+route_output_dim*2
+        input_dim = max_num_nodes_per_route+route_output_dim*3
         self.mlp = NN(input_dim=input_dim, 
                       layers_info=hyperparameters["linear_hidden_units"] + [hyperparameters["output_dim"]],
                       output_activation=None,
@@ -225,8 +225,9 @@ class MLP_RL_Model(torch.nn.Module):
                 x_r, _ = self.route_model(x_r)
                 x_r = x_r[-1, :, :]
             route_rnn_output_list.append(x_r)
-        x_r = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
-        x = torch.cat((route_cost_mask, x_cr, x_r), axis=1)
+        x_r_mean = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
+        x_r_max, _ = torch.stack(route_rnn_output_list, dim=1).max(axis=1)
+        x = torch.cat((route_cost_mask, x_cr, x_r_mean, x_r_max), axis=1)
         x = self.mlp(x)
         if self.key_to_use == "Actor": x = self.final_layer(x)
         out = torch.mul(x, route_len_mask)

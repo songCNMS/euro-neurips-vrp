@@ -97,7 +97,8 @@ class SAC_Discrete(SAC):
         qf2 = self.critic_local_2(state_batch).gather(1, action_batch.long())
         qf1_loss = F.mse_loss(qf1, next_q_value)
         qf2_loss = F.mse_loss(qf2, next_q_value)
-        return qf1_loss, qf2_loss
+        q_vals = qf1.cpu().detach().numpy()
+        return qf1_loss, qf2_loss, q_vals
 
     def calculate_actor_loss(self, state_batch):
         """Calculates the loss for the actor. This loss includes the additional entropy term"""
@@ -145,6 +146,7 @@ class SAC_Discrete(SAC):
         # problem_list = ["ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"]
         eval_rounds = min(5, len(problem_list))
         init_cost, final_cost, hybrid_cost = 0.0, 0.0, 0.0
+        problem_reward_list = []
         for i in range(eval_rounds):
             problem = problem_list[i]
             hybrid_cost += hybrid_res[problem]
@@ -157,9 +159,11 @@ class SAC_Discrete(SAC):
                 state, reward, done, _ = self.eval_environment.step(action)
                 print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
                 _total_reward += reward
+            problem_reward_list.append(_total_reward)
             total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()
-        self.eval_environment.switch_mode("train")    
+        self.eval_environment.switch_mode("train")
+        print("problem reward: ", problem_reward_list)
         return total_reward/eval_rounds, init_cost/eval_rounds, final_cost/eval_rounds, hybrid_cost/eval_rounds
     
     def print_summary_of_latest_evaluation_episode(self):

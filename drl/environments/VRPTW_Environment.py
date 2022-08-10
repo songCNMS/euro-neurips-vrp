@@ -160,7 +160,7 @@ class VRPTW_Environment(gym.Env):
         self.cur_step += 1
         self.steps_not_improved += 1
         self.reward, self.cur_routes = self.get_improve(route, node_idx)
-        if self.reward > 0: self.steps_not_improved = 0
+        if self.reward > 0.0: self.steps_not_improved = 0
         self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         while True:
             self.cur_route_name = self.route_name_list[self.cur_route_idx]
@@ -168,8 +168,8 @@ class VRPTW_Environment(gym.Env):
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
-        if self.done: self.reward = -self.reward_shaping(self.get_route_cost())
-        elif self.reward > 0.0: self.reward = -self.reward
+        if self.done: self.reward = 50.0-self.reward_shaping(self.get_route_cost())
+        else: self.reward = -self.reward
         return self.state, self.reward, self.done, {}
 
     def switch_mode(self, mode):

@@ -170,14 +170,17 @@ class SAC(Base_Agent):
     def learn(self):
         """Runs a learning iteration for the actor, both critics and (if specified) the temperature parameter"""
         state_batch, action_batch, reward_batch, next_state_batch, mask_batch = self.sample_experiences()
-        qf1_loss, qf2_loss = self.calculate_critic_losses(state_batch, action_batch, reward_batch, next_state_batch, mask_batch)
+        qf1_loss, qf2_loss, q_vals = self.calculate_critic_losses(state_batch, action_batch, reward_batch, next_state_batch, mask_batch)
         self.update_critic_parameters(qf1_loss, qf2_loss)
 
         policy_loss, log_pi = self.calculate_actor_loss(state_batch)
         res = {"memory_size": len(self.memory),
                "qf1_loss": qf1_loss.item(),
                "qf2_loss": qf2_loss.item(),
-               "policy_loss": policy_loss.item()}
+               "policy_loss": policy_loss.item(),
+               "q_max": np.max(q_vals),
+               "q_mean": np.mean(q_vals),
+               "q_min": np.min(q_vals)}
         if self.automatic_entropy_tuning: 
             alpha_loss = self.calculate_entropy_tuning_loss(log_pi)
             res["alpha_loss"] = alpha_loss.item()
@@ -207,7 +210,8 @@ class SAC(Base_Agent):
         qf2 = self.critic_local_2(torch.cat((state_batch, action_batch), 1))
         qf1_loss = F.mse_loss(qf1, next_q_value)
         qf2_loss = F.mse_loss(qf2, next_q_value)
-        return qf1_loss, qf2_loss
+        q_vals = qf1.cpu().detach().numpy()
+        return qf1_loss, qf2_loss, q_vals
 
     def calculate_actor_loss(self, state_batch):
         """Calculates the loss for the actor. This loss includes the additional entropy term"""
