@@ -158,7 +158,7 @@ class SAC_Discrete(SAC):
                 action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
                 print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
-                _total_reward += reward
+                _total_reward = reward
             problem_reward_list.append(_total_reward)
             total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()
