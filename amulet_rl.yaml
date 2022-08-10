@@ -34,4 +34,4 @@ jobs:
 - name: vrptw_ortec
   sku: G1
   command:
-  - python drl/results/VRPTW.py --remote
+  - python drl/results/VRPTW.py --remote --instance ortec --exp_name 
