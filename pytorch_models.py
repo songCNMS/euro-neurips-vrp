@@ -1,4 +1,4 @@
-import torch as pt
+import torch
 from torch.utils.data import Dataset, DataLoader
 import os
 import pandas as pd
@@ -111,9 +111,10 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
     
     num_episodes = 0
     early_stop_rounds = 10
-    init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
+    # init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
     # if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
     # else: init_routes, total_cost = None, None
+    init_routes, total_cost = None, None
     if init_routes is None:
         np.random.seed(exp_round)
         cur_routes, total_cost, _, _, _ = \
@@ -159,7 +160,7 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
         np.save(file_name+".candidates", candidate_features, allow_pickle=False)
         np.save(file_name+".customers", customer_features, allow_pickle=False)
         np.save(file_name+".cost", cost_improvements, allow_pickle=False)
-        return candidate_features, customer_features, cost_improvement
+        return candidate_features, customer_features, cost_improvements
     else: return None, None, None
 
 def get_local_features(folder_name, eval=False):
@@ -223,7 +224,7 @@ if __name__ == '__main__':
         output_dir = "./"
 
     # instance_list = ["200", "400", "600", "800", "1000", "ortec"]
-    instance_list = ["400"]
+    instance_list = [args.instance]
     max_exp_round = 50
     all_experiments_list = []
     for exp_round in range(1, max_exp_round+1):

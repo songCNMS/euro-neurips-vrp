@@ -61,6 +61,7 @@ class SAC_Discrete(SAC):
         self.greedy_exploration = self.hyperparameters["greedy_exploration"]
         self.start_exploration_rate = self.hyperparameters["start_exploration_rate"]
         self.end_exploration_rate = self.hyperparameters["end_exploration_rate"]
+        self.cost_reduction = self.config.cost_reduction
 
     def produce_action_and_action_info(self, state):
         """Given the state, produces an action, the probability of the action, the log probability of the action, and
@@ -106,7 +107,8 @@ class SAC_Discrete(SAC):
         qf1_pi = self.critic_local(state_batch)
         qf2_pi = self.critic_local_2(state_batch)
         min_qf_pi = torch.min(qf1_pi, qf2_pi)
-        inside_term = self.alpha * log_action_probabilities - min_qf_pi
+        if self.cost_reduction: inside_term = self.alpha * log_action_probabilities + min_qf_pi
+        else: inside_term = self.alpha * log_action_probabilities - min_qf_pi
         policy_loss = (action_probabilities * inside_term).sum(dim=1).mean()
         log_action_probabilities = torch.sum(log_action_probabilities * action_probabilities, dim=1)
         return policy_loss, log_action_probabilities

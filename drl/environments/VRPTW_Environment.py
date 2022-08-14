@@ -49,7 +49,7 @@ class VRPTW_Environment(gym.Env):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
-            problem_file = np.random.choice(problem_list)
+            problem_file = np.random.choice(problem_list[:10])
             # problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
@@ -151,7 +151,7 @@ class VRPTW_Environment(gym.Env):
         return self.reward_shaping(cost_reduction), cur_routes
     
     def reward_shaping(self, cost_reduction):
-        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction / self.max_distance)
+        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction)
 
     def step(self, action):
         node_idx = action
@@ -168,8 +168,8 @@ class VRPTW_Environment(gym.Env):
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
-        if self.done: self.reward = 50.0-self.reward_shaping(self.get_route_cost())
-        else: self.reward = -10.0*self.reward
+        if self.done: self.reward = (self.init_total_cost-self.get_route_cost()) / self.max_distance
+        else: self.reward = 0
         return self.state, self.reward, self.done, {}
 
     def switch_mode(self, mode):
