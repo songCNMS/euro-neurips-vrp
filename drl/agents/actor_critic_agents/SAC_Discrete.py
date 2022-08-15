@@ -145,6 +145,7 @@ class SAC_Discrete(SAC):
         hybrid_res = {row['problem']: row['total_cost'] for _, row in hybrid_res_df.iterrows()}
         dir_name = os.path.dirname(f"{self.eval_environment.data_dir}/cvrp_benchmarks/homberger_{self.eval_environment.instance}_customer_instances/")
         problem_list = sorted(os.listdir(dir_name))
+        # problem_list = [p for p in problem_list if (p.split('_')[0] in ["R1", "C1", "RC1"])]
         # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
         # problem_list = ["ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"]
         eval_rounds = min(5, len(problem_list))
@@ -161,7 +162,7 @@ class SAC_Discrete(SAC):
                 action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
                 print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
-                _total_reward = reward
+                if reward >= 0: _total_reward = reward
             problem_reward_list.append(_total_reward)
             total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()
@@ -175,13 +176,15 @@ class SAC_Discrete(SAC):
         print("----------------------------")
         print("Episode score {} ".format(self.total_episode_score_so_far))
         total_reward, init_cost, final_cost, hybrid_cost = self.eval()
-        wandb.log({"cost_reduction": total_reward,
-                   "init_cost": init_cost,
-                   "final_cost": final_cost,
-                   "hybrid_cost": hybrid_cost})
+        res = {"cost_reduction": total_reward,
+                "init_cost": init_cost,
+                "final_cost": final_cost,
+                "hybrid_cost": hybrid_cost}
+        wandb.log(res)
         self.eval_reward_list.append(total_reward)
         print("Eval reward {}, best reward {} ".format(total_reward, np.max(self.eval_reward_list)))
         print("History rewards: ", self.eval_reward_list)
+        print(res)
         print("----------------------------")
         self.locally_save_policy(self.episode_number)
         if total_reward == np.max(self.eval_reward_list):

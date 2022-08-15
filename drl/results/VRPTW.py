@@ -167,14 +167,14 @@ if __name__ == "__main__":
             },
 
             "min_steps_before_learning": 64,
-            "batch_size": 512,
+            "batch_size": 256,
             "discount_rate": 1.0,
             "mu": 0.0, #for O-H noise
             "theta": 0.15, #for O-H noise
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
-            "update_every_n_steps": 1, # how frequency learn is run
+            "update_every_n_steps": 8, # how frequency learn is run
             "learning_updates_per_learning_session": 1, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 2.0,

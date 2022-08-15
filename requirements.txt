@@ -1,4 +1,3 @@
-pytorch
 pandas
 elkai
 matplotlib

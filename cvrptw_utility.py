@@ -6,7 +6,7 @@ from nn_builder.pytorch.NN import NN
 
 
 route_output_dim = 128
-max_num_route = 40
+max_num_route = 48
 max_num_nodes_per_route = 24
 node_embedding_dim = 32
 depot = "Customer_0"
@@ -190,7 +190,8 @@ class MLP_RL_Model(torch.nn.Module):
         self.mlp_route = hyperparameters["linear_route"]
         if self.mlp_route: self.route_model = Route_MLP_Model()
         else: self.route_model = Route_Model()
-        self.final_layer = torch.nn.Softmax(dim=1)
+        if self.key_to_use == 'Actor': self.final_layer = torch.nn.Softmax(dim=1)
+        else: self.final_layer = torch.nn.Softplus(beta=1, threshold=40)
         self.exploration_rate = 1.0
         self.rate_delta = 0.01
         input_dim = max_num_nodes_per_route+route_output_dim*3
@@ -229,7 +230,7 @@ class MLP_RL_Model(torch.nn.Module):
         x_r_max, _ = torch.stack(route_rnn_output_list, dim=1).max(axis=1)
         x = torch.cat((route_cost_mask, x_cr, x_r_mean, x_r_max), axis=1)
         x = self.mlp(x)
-        if self.key_to_use == "Actor": x = self.final_layer(x)
+        x = self.final_layer(x)
         out = torch.mul(x, route_len_mask)
         return out
     

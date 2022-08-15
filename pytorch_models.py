@@ -108,9 +108,8 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
             distance_matrix_dict = get_problem_dict(nb_customers, demands, service_time,
                                                     earliest_start, latest_end, max_horizon,
                                                     distance_warehouses, distance_matrix)
-    
     num_episodes = 0
-    early_stop_rounds = 10
+    early_stop_rounds = 100
     # init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
     # if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=600)
     # else: init_routes, total_cost = None, None
@@ -122,13 +121,14 @@ def get_features(problem_file, exp_round, output_dir, solo=True):
                                                        earliest_start, latest_end, max_horizon,
                                                        distance_warehouses, distance_matrix)
         init_routes = []
-        for route in cur_routes.values(): init_routes.append([int(c.split('_')[-1])-1 for c in route])
+        for route in cur_routes.values(): init_routes.append([int(c.split('_')[-1]) for c in route])
     else:
         cur_routes = {}
         for i, route in enumerate(init_routes):
             path_name = f"PATH{i}"
             cur_routes[path_name] = [f"Customer_{c}" for c in route]
-    solution_file_name = f"./cvrp_benchmarks/RL_train_data/{problem_name}.npy"
+    os.makedirs(f"{output_dir}/cvrp_benchmarks/RL_train_data/", exist_ok=True)
+    solution_file_name = f"{output_dir}/cvrp_benchmarks/RL_train_data/{problem_name}.npy"
     np.save(solution_file_name, np.array(init_routes))
     cost_list = [total_cost]
     candidate_features_list = []
@@ -225,7 +225,7 @@ if __name__ == '__main__':
 
     # instance_list = ["200", "400", "600", "800", "1000", "ortec"]
     instance_list = [args.instance]
-    max_exp_round = 50
+    max_exp_round = 1
     all_experiments_list = []
     for exp_round in range(1, max_exp_round+1):
         for instance in instance_list:

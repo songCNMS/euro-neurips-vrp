@@ -2,22 +2,25 @@ description: VRPTW_RL_SAC
 
 target:
   service: amlk8s
-  name: itplabrl1cl1
-  vc: resrchvc
+  name: itpwus2cpucl1
+  vc: gcrcpu
   # run "amlt target list amlk8s" to list the names of available AMLK8s targets
   # name: msrresrchvc
   # vc: gcr-singularity-resrch
 
 environment:
-  image: lesongdocker:vrp
+  image: lesongdocker:env38
   registry: resrchvc4cr.azurecr.io # any public registry can be specified here
   username: resrchvc4cr
   setup:
     - apt install libffi-dev
     - pip install pulp
+    - pip install gym
+    - pip install pyyaml
     - pip install elkai
     - pip install wandb
     - pip install nn_builder==0.0.12
+    - pip install scikit-network
     - cd baselines/hgs_vrptw; make all; cd ../..
 
 code:
@@ -32,6 +35,6 @@ data:
 # list of jobs to run, we run 2 jobs in this example
 jobs:
 - name: vrptw_ortec
-  sku: G1
+  sku: C32
   command:
-  - python drl/results/VRPTW.py --remote --instance ortec --exp_name 
+  - python drl/results/VRPTW.py --remote --instance ortec --exp_name ortec

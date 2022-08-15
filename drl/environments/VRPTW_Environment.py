@@ -1,5 +1,6 @@
 import random
 import os
+import sys
 import math
 from collections import namedtuple
 import gym
@@ -29,8 +30,10 @@ class VRPTW_Environment(gym.Env):
         self.cur_step = 0
         self._max_episode_steps = max_num_nodes_per_route*max_num_route
         self.max_episode_steps = self._max_episode_steps
-        self.early_stop_steps = 10
+        self.early_stop_steps = 50
+        self.switch_route_early_stop = 5
         self.steps_not_improved = 0
+        self.steps_not_improvoed_same_route = 0
         self.trials = 10
         self.reward_threshold = float("inf")
         self.id = "VRPTW"
@@ -49,33 +52,49 @@ class VRPTW_Environment(gym.Env):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
-            problem_file = np.random.choice(problem_list[:10])
+            # problem_list = [p for p in problem_list if (p.split('_')[0] in ["R1", "C1", "RC1"])]
+            problem_file = np.random.choice(problem_list)
             # problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
-        if self.instance != 'ortec': self.problem = tools.read_solomon(self.problem_file)
-        else: self.problem = tools.read_vrplib(self.problem_file)
-        nb_customers = len(self.problem['is_depot']) - 1
+        if self.instance != 'ortec':
+            (nb_customers, nb_trucks, truck_capacity, 
+            distance_matrix, distance_warehouses, demands, service_time,
+                earliest_start, latest_end, max_horizon, 
+                    warehouse_x, warehouse_y, customers_x, customers_y) = read_input_cvrptw(self.problem_file)
+            self.problem = tools.read_solomon(self.problem_file)
+        else:
+            problem = tools.read_vrplib(self.problem_file)
+            self.problem = problem
+            nb_customers = len(problem['is_depot']) - 1
+            _time_windows = problem['time_windows']
+            _duration_matrix = problem['duration_matrix']
+            _service_times = problem['service_times']
+            _demands = problem['demands']
+            distance_matrix = np.zeros((nb_customers, nb_customers))
+            distance_warehouses = np.zeros(nb_customers)
+            earliest_start, latest_end, service_time, demands, max_horizon = [], [], [], [], _time_windows[0][1]
+            for i in range(nb_customers):
+                distance_warehouses[i] = _duration_matrix[0][i+1]
+                earliest_start.append(_time_windows[i+1][0])
+                latest_end.append(_time_windows[i+1][1])
+                service_time.append(_service_times[i+1])
+                demands.append(_demands[i+1])
+                for j in range(nb_customers):
+                    distance_matrix[i][j] = _duration_matrix[i+1][j+1]
+        
         self.truck_capacity = self.problem['capacity']
-        time_windows = self.problem['time_windows']
-        earliest_start = [time_windows[i][0] for i in range(1, nb_customers+1)]
-        latest_end = [time_windows[i][1] for i in range(1, nb_customers+1)]
-        max_horizon = time_windows[0][1]
-        duration_matrix = self.problem['duration_matrix']
-        distance_warehouses = duration_matrix[0, 1:]
-        distance_matrix = duration_matrix[1:, 1:] 
-        service_times = self.problem['service_times']
-        demands = self.problem['demands']
-        self.max_distance = np.max(duration_matrix)
+        self.max_distance = max(np.max(distance_matrix), np.max(distance_warehouses))
         self.all_customers, self.demands_dict, self.service_time_dict,\
             self.earliest_start_dict, self.latest_end_dict, self.distance_matrix_dict\
                 = get_problem_dict(nb_customers,
-                                   demands, service_times, 
+                                   demands, service_time, 
                                    earliest_start, latest_end, max_horizon, 
                                    distance_warehouses, distance_matrix)
+        
         spectral = Spectral(n_components=node_embedding_dim)
         self.node_embeddings = {}
-        node_embeddings_array = spectral.fit_transform(duration_matrix)
+        node_embeddings_array = spectral.fit_transform(self.problem['duration_matrix'])
         for i, c in enumerate([depot] + self.all_customers): self.node_embeddings[c] = node_embeddings_array[i, :]
         if routes is None:
             solution_file_name = f"{self.data_dir}/cvrp_benchmarks/RL_train_data/{self.problem_name}.npy"
@@ -96,11 +115,13 @@ class VRPTW_Environment(gym.Env):
         self.route_name_list = sorted(list(self.cur_routes.keys()))
         self.cur_route_idx = 0
         self.cur_route_name = self.route_name_list[self.cur_route_idx]
+        
             
     def reset(self, problem_file=None, routes=None, cur_route=None):
         # self.load_problem("ORTEC-VRPTW-ASYM-50d1f78d-d1-n329-k19.txt", routes, cur_route)
         self.load_problem(problem_file, routes, cur_route)
         self.steps_not_improved = 0
+        self.steps_not_improvoed_same_route = 0
         self.cur_step = 0
         self.state = self.get_state()
         return self.state
@@ -155,21 +176,33 @@ class VRPTW_Environment(gym.Env):
 
     def step(self, action):
         node_idx = action
+        if self.cur_route_name not in self.cur_routes:
+            print(self.problem_name, self.cur_route_name)
+            print(self.cur_routes)
+            sys.exit(0)
         route = self.cur_routes[self.cur_route_name]
         assert node_idx < len(route), f"state: {self.state[0]}, node: {node_idx}, route: {len(route)}"
         self.cur_step += 1
         self.steps_not_improved += 1
-        self.reward, self.cur_routes = self.get_improve(route, node_idx)
-        if self.reward > 0.0: self.steps_not_improved = 0
-        self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
-        while True:
-            self.cur_route_name = self.route_name_list[self.cur_route_idx]
-            if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
+        self.steps_not_improvoed_same_route += 1
+        cost_reduction, _routes = self.get_improve(route, node_idx)
+        if cost_reduction > 0.0:
+            self.steps_not_improved = 0
+            self.steps_not_improvoed_same_route = 0
+            self.cur_routes = _routes
+            self.reward = 0.0
+        elif self.steps_not_improvoed_same_route >= self.switch_route_early_stop: 
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
+            while True:
+                self.cur_route_name = self.route_name_list[self.cur_route_idx]
+                if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
+                self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
+            self.steps_not_improvoed_same_route = 0
+            self.reward = 0.0
+        else: self.reward = -1.0
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
         if self.done: self.reward = (self.init_total_cost-self.get_route_cost()) / self.max_distance
-        else: self.reward = 0
         return self.state, self.reward, self.done, {}
 
     def switch_mode(self, mode):

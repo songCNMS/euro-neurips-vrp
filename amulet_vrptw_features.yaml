@@ -16,6 +16,9 @@ environment:
     - apt install libffi-dev
     - pip install pulp
     - pip install elkai
+    - pip install wandb
+    - pip install nn_builder==0.0.12
+    - pip install scikit-network
     - cd baselines/hgs_vrptw; make all; cd ../..
 
 code:
@@ -32,4 +35,4 @@ jobs:
 - name: vrptw_ortec
   sku: C64
   command:
-  - python pytorch_models.py --mp --remote
+  - python pytorch_models.py --data --mp --remote --instance 600

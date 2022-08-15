@@ -258,7 +258,7 @@ def generate_init_solution(nb_customers, truck_capacity,
                                                                                         
     # initialize path from tsp
     num_selected_customers = 0
-    for i in range(20):
+    for i in range(5):
         if i == 0: _tsp_solution = tsp_solution[:]
         else:
             idx = np.random.randint(1, nb_customers-1)
