@@ -214,3 +214,20 @@ class VRPTW_Environment(gym.Env):
             f = f"{loc_dir}/{np.random.randint(0, 100000)}.pkl"
             with open(f, "wb") as output_file:
                 cPickle.dump(self.local_experience_buffer, output_file)
+
+
+
+if __name__ == "__main__":
+    data_dir = "./"
+    instance = 'ortec'
+    save_ep = True
+    env = VRPTW_Environment(instance, data_dir, save_data=save_ep, seed=1)
+    num_epoch = 10
+    for i in range(num_epoch):
+        state = env.reset()
+        print("epoch: ", i, "problem: ", env.problem_name)
+        done = False
+        while not done:
+            action = np.random.randint(int(state[0]))
+            state, _, done, _ = env.step(action)
+        env.save_experience(f"./amlt/vrptw_data/vrptw_{instance}/")
