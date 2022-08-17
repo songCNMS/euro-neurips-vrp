@@ -61,6 +61,7 @@ class SAC(Base_Agent):
         self.do_evaluation_iterations = self.hyperparameters["do_evaluation_iterations"]
 
         self.eval_reward_list = []
+        self.loss_res = {}
 
     def save_result(self):
         """Saves the result of an episode of the game. Overriding the method in Base Agent that does this because we only
@@ -106,6 +107,9 @@ class SAC(Base_Agent):
             self.state = self.next_state
             self.global_step_number += 1
             _done = (np.any(self.done) if self.is_vec_env else self.done)
+        if not self.is_vec_env: self.environment.save_experience(self.config.log_path)
+        else:
+            for i in range(self.environment.num_envs): self.environment.envs[i].save_experience(self.config.log_path)
         print(self.total_episode_score_so_far)
         if eval_ep: 
             self.print_summary_of_latest_evaluation_episode()
@@ -174,19 +178,19 @@ class SAC(Base_Agent):
         self.update_critic_parameters(qf1_loss, qf2_loss)
 
         policy_loss, log_pi = self.calculate_actor_loss(state_batch)
-        res = {"memory_size": len(self.memory),
-               "qf1_loss": qf1_loss.item(),
-               "qf2_loss": qf2_loss.item(),
-               "policy_loss": policy_loss.item(),
-               "q_max": np.max(q_vals),
-               "q_mean": np.mean(q_vals),
-               "q_min": np.min(q_vals)}
+        self.loss_res = {"memory_size": len(self.memory),
+                         "qf1_loss": qf1_loss.item(),
+                         "qf2_loss": qf2_loss.item(),
+                         "policy_loss": policy_loss.item(),
+                         "q_max": np.max(q_vals),
+                         "q_mean": np.mean(q_vals),
+                         "q_min": np.min(q_vals)}
         if self.automatic_entropy_tuning: 
             alpha_loss = self.calculate_entropy_tuning_loss(log_pi)
-            res["alpha_loss"] = alpha_loss.item()
+            self.loss_res["alpha_loss"] = alpha_loss.item()
         else: alpha_loss = None
         self.update_actor_parameters(policy_loss, alpha_loss)
-        wandb.log(res)
+        wandb.log(self.loss_res)
 
     def sample_experiences(self):
         return  self.memory.sample()

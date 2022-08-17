@@ -3,6 +3,7 @@ sys.path.append("./")
 sys.path.append("./drl")
 import multiprocessing as mp
 from yaml import parse
+import _pickle as cPickle
 from agents.actor_critic_agents.A2C import A2C
 from agents.DQN_agents.Dueling_DDQN import Dueling_DDQN
 from agents.actor_critic_agents.SAC_Discrete import SAC_Discrete
@@ -22,9 +23,35 @@ import random
 import argparse
 import wandb
 import os
-
+import copy
 from datetime import datetime
 import platform
+
+offline_steps = 10000
+eval_every_iterations = 100
+def offline_training(agent, args):
+    data_loc = f"amlt/vrptw_data/vrptw_{args.instance}/"
+    problem_list = sorted(os.listdir(data_loc))
+    data_list = []
+    for problem in problem_list:
+        if problem.startswith(args.instance):
+            data_list.extend([f"{data_loc}/{problem}/{d}" for d in os.listdir(f"{data_loc}/{problem}")])
+    for data_file in data_list:
+        with open(data_file, "rb") as f:
+            data = cPickle.load(f)
+            i = 0
+            mask = 0
+            while i + 3 <= len(data)-1:
+                state, action, reward, next_state = data[i], data[i+1], data[i+2], data[i+3]
+                i += 3
+                mask = 1 if (i >= len(data)-1) else 0
+                agent.save_experience(experience=(
+                    state, action, reward, next_state, mask))
+    for i in range(offline_steps):
+        print("offline learning step", i, "starting")
+        agent.learn()
+        print("offline learning step", i, "ending")
+        if (i+1) % eval_every_iterations == 0: agent.print_summary_of_latest_evaluation_episode()
 
 
 if __name__ == "__main__":
@@ -37,6 +64,7 @@ if __name__ == "__main__":
     parser.add_argument('--instance', type=str, default="ortec")
     parser.add_argument('--exp_name', type=str, default="exp")
     parser.add_argument("--remote", action="store_true")
+    parser.add_argument("--save_ep", action="store_true")
     args = parser.parse_args()
 
     config = Config()
@@ -49,14 +77,14 @@ if __name__ == "__main__":
         config.output_dir = "./logs/"
     
     # wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
-    N_ENVS = 8
+    N_ENVS = 4
     vec_env = make_vec_env(
-        lambda: VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100)),
+        lambda: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=random.randint(0, 100)),
         n_envs=N_ENVS,
         vec_env_cls=DummyVecEnv
     )
     config.environment = vec_env
-    # config.environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
+    # config.environment = VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=config.seed)
     config.eval_environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.log_path = config.output_dir
     config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
@@ -174,7 +202,7 @@ if __name__ == "__main__":
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
-            "update_every_n_steps": 8, # how frequency learn is run
+            "update_every_n_steps": 16, # how frequency learn is run
             "learning_updates_per_learning_session": 1, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 2.0,
@@ -192,7 +220,17 @@ if __name__ == "__main__":
     exp_name = datetime.now().strftime("%m%d-%H%M")
     if not config.linear_route: exp_name += f'_GRU_{AGENTS[0].agent_name}_{args.exp_name}'
     wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=exp_name, group=f"{platform.node()}")
+    
     trainer = Trainer(config, AGENTS)
+    agent_config = copy.deepcopy(config)
+    if config.randomise_random_seed:
+        agent_config.seed = random.randint(0, 2**32 - 2)
+    agent_name = SAC_Discrete.agent_name
+    agent_group = trainer.agent_to_agent_group[agent_name]
+    agent_config.hyperparameters = config.hyperparameters[agent_group]
+    agent = AGENTS[0](agent_config)
+    offline_training(agent, args)
+    
     trainer.run_games_for_agents()
     vec_env.close()
 

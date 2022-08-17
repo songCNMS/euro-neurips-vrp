@@ -35,6 +35,6 @@ data:
 # list of jobs to run, we run 2 jobs in this example
 jobs:
 - name: vrptw_ortec
-  sku: C32
+  sku: C64
   command:
-  - python drl/results/VRPTW.py --remote --instance ortec --exp_name ortec
+  - python drl/results/VRPTW.py --remote --instance ortec --exp_name ortec --save_ep

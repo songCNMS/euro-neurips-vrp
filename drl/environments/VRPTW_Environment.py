@@ -8,6 +8,7 @@ import numpy as np
 from gym import spaces
 from gym.utils import seeding
 from sknetwork.embedding import Spectral
+import _pickle as cPickle
 
 from cvrptw import read_input_cvrptw, compute_cost_from_routes
 import tools
@@ -17,21 +18,21 @@ from cvrptw_utility import depot, device, feature_dim, max_num_nodes_per_route, 
 from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
 
 
-
 class VRPTW_Environment(gym.Env):
     environment_name = "VRPTW Environment"
 
-    def __init__(self, instance, data_dir, seed=1):
+    def __init__(self, instance, data_dir, save_data=False, seed=1):
         self.instance = instance
         self.data_dir = data_dir
         self.rd_seed = seed
+        self.save_data = save_data
         self.mode = 'train'
         self.reset()
         self.cur_step = 0
         self._max_episode_steps = max_num_nodes_per_route*max_num_route
         self.max_episode_steps = self._max_episode_steps
-        self.early_stop_steps = 50
-        self.switch_route_early_stop = 5
+        self.early_stop_steps = max_num_route
+        self.switch_route_early_stop = max_num_nodes_per_route // 2
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
         self.trials = 10
@@ -124,6 +125,7 @@ class VRPTW_Environment(gym.Env):
         self.steps_not_improvoed_same_route = 0
         self.cur_step = 0
         self.state = self.get_state()
+        if self.save_data: self.local_experience_buffer = [np.copy(self.state)]
         return self.state
 
     def get_route_cost(self):
@@ -176,10 +178,6 @@ class VRPTW_Environment(gym.Env):
 
     def step(self, action):
         node_idx = action
-        if self.cur_route_name not in self.cur_routes:
-            print(self.problem_name, self.cur_route_name)
-            print(self.cur_routes)
-            sys.exit(0)
         route = self.cur_routes[self.cur_route_name]
         assert node_idx < len(route), f"state: {self.state[0]}, node: {node_idx}, route: {len(route)}"
         self.cur_step += 1
@@ -193,20 +191,26 @@ class VRPTW_Environment(gym.Env):
             self.reward = 0.0
         elif self.steps_not_improvoed_same_route >= self.switch_route_early_stop: 
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
-            while True:
-                self.cur_route_name = self.route_name_list[self.cur_route_idx]
-                if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
-                self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
             self.steps_not_improvoed_same_route = 0
             self.reward = 0.0
         else: self.reward = -1.0
+        while True:
+            self.cur_route_name = self.route_name_list[self.cur_route_idx]
+            if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
+            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
         if self.done: self.reward = (self.init_total_cost-self.get_route_cost()) / self.max_distance
+        if self.save_data and self.reward >= 0.0: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
         return self.state, self.reward, self.done, {}
 
     def switch_mode(self, mode):
         self.mode = mode
 
-
-
+    def save_experience(self, output_dir):
+        if self.save_data:
+            loc_dir = f"{output_dir}/{self.problem_name}/"
+            os.makedirs(loc_dir, exist_ok=True)
+            f = f"{loc_dir}/{np.random.randint(0, 100000)}.pkl"
+            with open(f, "wb") as output_file:
+                cPickle.dump(self.local_experience_buffer, output_file)
