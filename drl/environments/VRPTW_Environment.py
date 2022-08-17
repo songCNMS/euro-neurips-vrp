@@ -31,8 +31,8 @@ class VRPTW_Environment(gym.Env):
         self.cur_step = 0
         self._max_episode_steps = max_num_nodes_per_route*max_num_route
         self.max_episode_steps = self._max_episode_steps
-        self.early_stop_steps = max_num_route
         self.switch_route_early_stop = max_num_nodes_per_route // 2
+        self.early_stop_steps = (max_num_route // 2) * self.switch_route_early_stop
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
         self.trials = 10
