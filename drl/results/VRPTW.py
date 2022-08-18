@@ -78,11 +78,13 @@ if __name__ == "__main__":
     
     # wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
     N_ENVS = 4
-    vec_env = make_vec_env(
-        lambda: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=env_id),
-        n_envs=N_ENVS,
-        vec_env_cls=DummyVecEnv
-    )
+    # vec_env = make_vec_env(
+    #     lambda env_id: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=env_id),
+    #     n_envs=N_ENVS,
+    #     vec_env_cls=DummyVecEnv
+    # )
+    vec_env = DummyVecEnv([lambda: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=env_id)
+                           for env_id in range(1, 1+N_ENVS)])
     config.environment = vec_env
     # config.environment = VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=config.seed)
     config.eval_environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)

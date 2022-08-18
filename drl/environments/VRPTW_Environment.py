@@ -63,6 +63,7 @@ class VRPTW_Environment(gym.Env):
             # problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
+        print("loading problem: ", self.problem_name)
         if self.instance != 'ortec':
             (nb_customers, nb_trucks, truck_capacity, 
             distance_matrix, distance_warehouses, demands, service_time,
