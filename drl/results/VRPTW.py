@@ -78,13 +78,12 @@ if __name__ == "__main__":
     
     # wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
     N_ENVS = 4
-    # vec_env = make_vec_env(
-    #     lambda env_id: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=env_id),
-    #     n_envs=N_ENVS,
-    #     vec_env_cls=DummyVecEnv
-    # )
-    vec_env = DummyVecEnv([lambda: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=env_id)
-                           for env_id in range(1, 1+N_ENVS)])
+    vec_env = make_vec_env(
+        lambda: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep),
+        n_envs=N_ENVS,
+        vec_env_cls=DummyVecEnv
+    )
+    vec_env.seed(0)
     config.environment = vec_env
     # config.environment = VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=config.seed)
     config.eval_environment = VRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
@@ -224,14 +223,14 @@ if __name__ == "__main__":
     wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=exp_name, group=f"{platform.node()}")
     
     trainer = Trainer(config, AGENTS)
-    agent_config = copy.deepcopy(config)
-    if config.randomise_random_seed:
-        agent_config.seed = random.randint(0, 2**32 - 2)
-    agent_name = SAC_Discrete.agent_name
-    agent_group = trainer.agent_to_agent_group[agent_name]
-    agent_config.hyperparameters = config.hyperparameters[agent_group]
-    agent = AGENTS[0](agent_config)
-    offline_training(agent, args)
+    # agent_config = copy.deepcopy(config)
+    # if config.randomise_random_seed:
+    #     agent_config.seed = random.randint(0, 2**32 - 2)
+    # agent_name = SAC_Discrete.agent_name
+    # agent_group = trainer.agent_to_agent_group[agent_name]
+    # agent_config.hyperparameters = config.hyperparameters[agent_group]
+    # agent = AGENTS[0](agent_config)
+    # offline_training(agent, args)
     trainer.run_games_for_agents()
     vec_env.close()
 
