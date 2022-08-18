@@ -27,7 +27,7 @@ import copy
 from datetime import datetime
 import platform
 
-offline_steps = 10000
+offline_steps = 1000
 eval_every_iterations = 100
 def offline_training(agent, args):
     data_loc = f"amlt/vrptw_data/vrptw_{args.instance}/"
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     # wrappable_env = VRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
     N_ENVS = 4
     vec_env = make_vec_env(
-        lambda: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=random.randint(0, 100)),
+        lambda: VRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=env_id),
         n_envs=N_ENVS,
         vec_env_cls=DummyVecEnv
     )
@@ -202,8 +202,8 @@ if __name__ == "__main__":
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
-            "update_every_n_steps": 16, # how frequency learn is run
-            "learning_updates_per_learning_session": 1, # how many iterations per learn
+            "update_every_n_steps": 128, # how frequency learn is run
+            "learning_updates_per_learning_session": 8, # how many iterations per learn
             "automatically_tune_entropy_hyperparameter": True,
             "entropy_term_weight": 2.0,
             "add_extra_noise": False,
@@ -230,7 +230,6 @@ if __name__ == "__main__":
     agent_config.hyperparameters = config.hyperparameters[agent_group]
     agent = AGENTS[0](agent_config)
     offline_training(agent, args)
-    
     trainer.run_games_for_agents()
     vec_env.close()
 

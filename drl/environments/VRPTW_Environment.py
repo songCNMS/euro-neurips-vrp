@@ -1,3 +1,7 @@
+import sys
+sys.path.append("./")
+sys.path.append("./drl")
+import multiprocessing as mp
 import random
 import os
 import sys
@@ -22,6 +26,7 @@ class VRPTW_Environment(gym.Env):
     environment_name = "VRPTW Environment"
 
     def __init__(self, instance, data_dir, save_data=False, seed=1):
+        self.rng = np.random.default_rng(seed)
         self.instance = instance
         self.data_dir = data_dir
         self.rd_seed = seed
@@ -31,8 +36,8 @@ class VRPTW_Environment(gym.Env):
         self.cur_step = 0
         self._max_episode_steps = max_num_nodes_per_route*max_num_route
         self.max_episode_steps = self._max_episode_steps
-        self.switch_route_early_stop = max_num_nodes_per_route // 2
-        self.early_stop_steps = (max_num_route // 2) * self.switch_route_early_stop
+        self.switch_route_early_stop = (5 if self.mode == 'train' else 1)
+        self.early_stop_steps = max_num_route * self.switch_route_early_stop
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
         self.trials = 10
@@ -54,7 +59,7 @@ class VRPTW_Environment(gym.Env):
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
             # problem_list = [p for p in problem_list if (p.split('_')[0] in ["R1", "C1", "RC1"])]
-            problem_file = np.random.choice(problem_list)
+            problem_file = self.rng.choice(problem_list)
             # problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
@@ -124,6 +129,8 @@ class VRPTW_Environment(gym.Env):
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
         self.cur_step = 0
+        self.switch_route_early_stop = (5 if self.mode == 'train' else 1)
+        self.early_stop_steps = len(self.route_name_list) * self.switch_route_early_stop
         self.state = self.get_state()
         if self.save_data: self.local_experience_buffer = [np.copy(self.state)]
         return self.state
@@ -206,28 +213,44 @@ class VRPTW_Environment(gym.Env):
 
     def switch_mode(self, mode):
         self.mode = mode
-
+        
     def save_experience(self, output_dir):
         if self.save_data:
             loc_dir = f"{output_dir}/{self.problem_name}/"
             os.makedirs(loc_dir, exist_ok=True)
-            f = f"{loc_dir}/{np.random.randint(0, 100000)}.pkl"
+            f = f"{loc_dir}/{self.rng.integers(0, 100000)}.pkl"
             with open(f, "wb") as output_file:
                 cPickle.dump(self.local_experience_buffer, output_file)
 
 
 
-if __name__ == "__main__":
-    data_dir = "./"
-    instance = 'ortec'
-    save_ep = True
-    env = VRPTW_Environment(instance, data_dir, save_data=save_ep, seed=1)
-    num_epoch = 10
-    for i in range(num_epoch):
+def generate_env_data(idx, num_envs, instance, data_dir):
+    env = VRPTW_Environment(instance, data_dir, save_data=True, seed=idx)
+    for i in range(num_envs):
         state = env.reset()
         print("epoch: ", i, "problem: ", env.problem_name)
         done = False
         while not done:
-            action = np.random.randint(int(state[0]))
+            action = env.rng.integers(int(state[0]))
             state, _, done, _ = env.step(action)
-        env.save_experience(f"./amlt/vrptw_data/vrptw_{instance}/")
+            print("epoch: ", i, "problem: ", env.problem_name, "step: ", env.cur_step)
+        env.save_experience(f"{data_dir}/vrptw_{instance}/")
+    
+import argparse
+import os
+parser = argparse.ArgumentParser(description='Input of VRPTW Trainer')
+if __name__ == "__main__":
+    parser.add_argument('--instance', type=str, default="ortec")
+    parser.add_argument("--remote", action="store_true")
+    args = parser.parse_args()
+    if args.remote:
+        data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
+    else:
+        data_dir = "./"
+    procs = []
+    for idx in range(5):
+        proc = mp.Process(target=generate_env_data, args=(idx, 100, args.instance, data_dir))
+        procs.append(proc)
+        proc.start()
+    for proc in procs:
+        proc.join()

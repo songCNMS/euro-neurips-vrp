@@ -13,7 +13,7 @@ import wandb
 
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
-TRAINING_EPISODES_PER_EVAL_EPISODE = 5
+TRAINING_EPISODES_PER_EVAL_EPISODE = 100
 EPSILON = 1e-6
 
 class SAC(Base_Agent):
@@ -184,7 +184,8 @@ class SAC(Base_Agent):
                          "policy_loss": policy_loss.item(),
                          "q_max": np.max(q_vals),
                          "q_mean": np.mean(q_vals),
-                         "q_min": np.min(q_vals)}
+                         "q_min": np.min(q_vals),
+                         "alpha": self.alpha}
         if self.automatic_entropy_tuning: 
             alpha_loss = self.calculate_entropy_tuning_loss(log_pi)
             self.loss_res["alpha_loss"] = alpha_loss.item()
