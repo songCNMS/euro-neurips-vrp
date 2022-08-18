@@ -233,7 +233,7 @@ def generate_env_data(idx, num_envs, instance, data_dir):
         print("epoch: ", i, "problem: ", env.problem_name)
         done = False
         while not done:
-            action = env.rng.integers(int(state[0]))
+            action = env.rng.integers(min(int(state[0]), max_num_nodes_per_route))
             state, _, done, _ = env.step(action)
             print("epoch: ", i, "problem: ", env.problem_name, "step: ", env.cur_step)
         env.save_experience(f"{data_dir}/vrptw_{instance}/")

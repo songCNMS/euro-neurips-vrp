@@ -108,7 +108,6 @@ def map_node_to_route(cur_routes):
     return node_to_route_dict
 
 
-
 if torch.cuda.is_available(): device = "cuda:0"
 else: device = "cpu"
 

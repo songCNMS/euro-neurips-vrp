@@ -114,6 +114,9 @@ class Trainer(object):
             self.environment_name = agent.environment_title
             print(agent.hyperparameters)
             print("RANDOM SEED " , agent_config.seed)
+            
+            agent.locally_save_policy("best")
+            
             game_scores, rolling_scores, time_taken = agent.run_n_episodes()
             print("Time taken: {}".format(time_taken), flush=True)
             self.print_two_empty_lines()

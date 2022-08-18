@@ -16,7 +16,7 @@ from agents.DQN_agents.DQN import DQN
 from agents.DQN_agents.DQN_With_Fixed_Q_Targets import DQN_With_Fixed_Q_Targets
 from utilities.data_structures.Config import Config
 from environments.VRPTW_Environment import VRPTW_Environment
-from cvrptw_utility import device
+from cvrptw_utility import device, max_num_nodes_per_route
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 import random
@@ -45,8 +45,10 @@ def offline_training(agent, args):
                 state, action, reward, next_state = data[i], data[i+1], data[i+2], data[i+3]
                 i += 3
                 mask = 1 if (i >= len(data)-1) else 0
-                agent.save_experience(experience=(
-                    state, action, reward, next_state, mask))
+                if action < max_num_nodes_per_route:
+                    agent.save_experience(experience=(
+                        state, action, reward, next_state, mask))
+    print("memory size: ", len(agent.memory))
     for i in range(offline_steps):
         print("offline learning step", i, "starting")
         agent.learn()
@@ -223,14 +225,14 @@ if __name__ == "__main__":
     wandb.init(dir=f"{config.output_dir}/", project="VRPTW_SAC", config=vars(config), name=exp_name, group=f"{platform.node()}")
     
     trainer = Trainer(config, AGENTS)
-    # agent_config = copy.deepcopy(config)
-    # if config.randomise_random_seed:
-    #     agent_config.seed = random.randint(0, 2**32 - 2)
-    # agent_name = SAC_Discrete.agent_name
-    # agent_group = trainer.agent_to_agent_group[agent_name]
-    # agent_config.hyperparameters = config.hyperparameters[agent_group]
-    # agent = AGENTS[0](agent_config)
-    # offline_training(agent, args)
+    agent_config = copy.deepcopy(config)
+    if config.randomise_random_seed:
+        agent_config.seed = random.randint(0, 2**32 - 2)
+    agent_name = SAC_Discrete.agent_name
+    agent_group = trainer.agent_to_agent_group[agent_name]
+    agent_config.hyperparameters = config.hyperparameters[agent_group]
+    agent = AGENTS[0](agent_config)
+    offline_training(agent, args)
     trainer.run_games_for_agents()
     vec_env.close()
 
