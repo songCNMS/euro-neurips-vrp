@@ -6,6 +6,37 @@ import gym
 from gym import wrappers
 import numpy as np
 import matplotlib.pyplot as plt
+import _pickle as cPickle
+from cvrptw_utility import max_num_nodes_per_route
+
+
+offline_steps = 1000
+eval_every_iterations = 100
+def offline_training(agent, instance):
+    data_loc = f"./amlt/vrptw_data/vrptw_{instance}/"
+    problem_list = sorted(os.listdir(data_loc))
+    data_list = []
+    for problem in problem_list:
+        if problem.startswith(instance):
+            data_list.extend([f"{data_loc}/{problem}/{d}" for d in os.listdir(f"{data_loc}/{problem}")])
+    for data_file in data_list:
+        with open(data_file, "rb") as f:
+            data = cPickle.load(f)
+            i = 0
+            mask = 0
+            while i + 3 <= len(data)-1:
+                state, action, reward, next_state = data[i], data[i+1], data[i+2], data[i+3]
+                i += 3
+                mask = 1 if (i >= len(data)-1) else 0
+                if action < max_num_nodes_per_route:
+                    agent.save_experience(experience=(
+                        state, action, reward, next_state, mask))
+    print("memory size: ", len(agent.memory))
+    for i in range(offline_steps):
+        print("offline learning step", i, "starting")
+        agent.learn()
+        print("offline learning step", i, "ending")
+        if (i+1) % eval_every_iterations == 0: agent.print_summary_of_latest_evaluation_episode()
 
 class Trainer(object):
     """Runs games for given agents. Optionally will visualise and save the results"""
@@ -115,7 +146,8 @@ class Trainer(object):
             print(agent.hyperparameters)
             print("RANDOM SEED " , agent_config.seed)
             
-            agent.locally_save_policy("best")
+            # agent.locally_save_policy("best")
+            offline_training(agent, "ortec")
             
             game_scores, rolling_scores, time_taken = agent.run_n_episodes()
             print("Time taken: {}".format(time_taken), flush=True)
