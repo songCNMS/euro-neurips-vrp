@@ -250,7 +250,7 @@ if __name__ == "__main__":
     else:
         data_dir = "./"
     procs = []
-    for idx in range(5):
+    for idx in range(64):
         proc = mp.Process(target=generate_env_data, args=(idx, 100, args.instance, data_dir))
         procs.append(proc)
         proc.start()
