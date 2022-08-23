@@ -104,8 +104,8 @@ def get_time_buffer_on_route(route, service_time, earliest_start, latest_end):
     
     for i, r in enumerate(route_wth_depot):
         # print(route, [(earliest_start[r], service_time[r], latest_end[r]) for r in route])
-        # assert cur_time <= latest_end[r], "wrong route"
-        if cur_time > latest_end[r]: return min_buffer
+        assert cur_time <= latest_end[r], f"wrong route {route}, {[(earliest_start[r], service_time[r], latest_end[r]) for r in route]}"
+        # if cur_time > latest_end[r]: return min_buffer
         step_buffer[i] = latest_end[r]-cur_time
         cur_time = max(cur_time, earliest_start[r]) + service_time[r]
     for i in range(len(route_wth_depot)-1, -1, -1):
@@ -120,14 +120,15 @@ def route_insertion_cost(route, customer, service_time,
     min_cost = float("inf")
     min_pos = None
     cur_time = earliest_start[depot] + service_time[depot]
-    min_buffer = get_time_buffer_on_route(route, service_time, earliest_start, latest_end)
+    alpha = 1.0
+    # min_buffer = get_time_buffer_on_route(route, service_time, earliest_start, latest_end)
     for i in range(route_len+1):
-        # new_partial_route = [customer] + route[i:]
+        new_partial_route = [customer] + route[i:]
         # if is_valid_pos(route, i, customer, service_time, earliest_start, latest_end):
-        # if time_window_check_partial_route(new_partial_route, cur_time, service_time, earliest_start, latest_end):
         if cur_time > latest_end[customer]: break
-        new_cur_time = max(cur_time, earliest_start[customer]) + service_time[customer]
-        if new_cur_time - cur_time <= min_buffer[i]:
+        if time_window_check_partial_route(new_partial_route, cur_time, service_time, earliest_start, latest_end):
+            new_cur_time = max(cur_time, earliest_start[customer]) + service_time[customer]
+            time_increase = new_cur_time - cur_time
             if i == 0:
                 old_cost = distance_matrix[depot][route[0]]
                 new_cost = distance_matrix[depot][customer] + distance_matrix[customer][route[0]]
@@ -137,8 +138,9 @@ def route_insertion_cost(route, customer, service_time,
             else:
                 old_cost = distance_matrix[route[i-1]][route[i]]
                 new_cost = distance_matrix[route[i-1]][customer] + distance_matrix[customer][route[i]]
-            if new_cost - old_cost < min_cost: 
-                min_cost = new_cost - old_cost
+            cur_cost = alpha*(new_cost-old_cost) + (1-alpha)*time_increase
+            if cur_cost < min_cost: 
+                min_cost = cur_cost
                 min_pos = i
         if i < route_len: cur_time = max(cur_time, earliest_start[route[i]]) + service_time[route[i]]
     return min_cost, min_pos

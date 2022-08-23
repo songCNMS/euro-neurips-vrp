@@ -116,7 +116,7 @@ class Customer_Model(torch.nn.Module):
         super(Customer_Model, self).__init__()
         self.output_dim = 32
         self.mlp = NN(input_dim=feature_dim, 
-                     layers_info=[128, self.output_dim],
+                     layers_info=[64, self.output_dim],
                      output_activation="tanh",
                      hidden_activations="tanh", initialiser="Xavier")
     
@@ -190,7 +190,7 @@ class MLP_RL_Model(torch.nn.Module):
         if self.mlp_route: self.route_model = Route_MLP_Model()
         else: self.route_model = Route_Model()
         if self.key_to_use == 'Actor': self.final_layer = torch.nn.Softmax(dim=1)
-        else: self.final_layer = torch.nn.Softplus(beta=1, threshold=40)
+        else: self.final_layer = torch.nn.Softmax(dim=1)
         self.exploration_rate = 1.0
         self.rate_delta = 0.01
         input_dim = max_num_nodes_per_route+route_output_dim*3
@@ -207,10 +207,10 @@ class MLP_RL_Model(torch.nn.Module):
         num_samples = state.size(0)
         route_len = state[:, 0].cpu().numpy().astype(int)
         route_cost_mask = state[:, 1:1+max_num_nodes_per_route]
-        route_len_mask = np.zeros((num_samples, max_num_nodes_per_route))
-        for i in range(num_samples):
-            route_len_mask[i, :route_len[i]] = 1.0
-        route_len_mask = torch.from_numpy(route_len_mask).to(device)
+        # route_len_mask = np.zeros((num_samples, max_num_nodes_per_route))
+        # for i in range(num_samples):
+        #     route_len_mask[i, :route_len[i]] = 1.0
+        # route_len_mask = torch.from_numpy(route_len_mask).to(device)
         state = state[:, 1+max_num_nodes_per_route:].reshape(num_samples, max_num_route+1, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
         if self.mlp_route: x_cr = self.route_model(state[:, 0, :])
@@ -230,7 +230,8 @@ class MLP_RL_Model(torch.nn.Module):
         x = torch.cat((route_cost_mask, x_cr, x_r_mean, x_r_max), axis=1)
         x = self.mlp(x)
         x = self.final_layer(x)
-        out = torch.mul(x, route_len_mask)
+        if self.key_to_use != 'Actor': x = torch.mul(x, 100.0)
+        out = torch.mul(x, route_cost_mask>0.0)
         return out
     
 def get_route_mask(route_nums):
@@ -335,7 +336,7 @@ class VRPTWDataset(Dataset):
 def extend_candidate_points(route, node_idx, distance_matrix, all_customers):
     if len(route) <= 2: 
         M = route[:]
-        if len(M) <= 1: M.append(depot)
+        # if len(M) <= 1: M.append(depot)
         prev_node = next_node = depot
     else:
         M = route[node_idx:node_idx+2]

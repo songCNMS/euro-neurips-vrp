@@ -34,7 +34,8 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
     
     # if exp_round % 2 == 1: init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
     # else: init_routes, total_cost = None, None
-    init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}')
+    init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{exp_round}', time_limit=60)
+    # init_routes, total_cost = None, None
     num_episodes = 100000
     early_stop_rounds = 200
     if init_routes is None:
@@ -52,10 +53,10 @@ def one_round_heuristics(exp_round, res_dict, problem, nb_customers,
     print(f"Round: {exp_round}, init cost {total_cost}")
     cost_list = []
     max_distance = np.max(distance_matrix)
-    saved_ck = torch.load('model.pt', map_location=device)
-    model = MLP_Model().to(device)
-    model.load_state_dict(saved_ck["model_state_dict"])
-
+    # saved_ck = torch.load('model.pt', map_location=device)
+    # model = MLP_Model().to(device)
+    # model.load_state_dict(saved_ck["model_state_dict"])
+    model = None
     for i in range(num_episodes):
         cur_routes, total_cost, _ = heuristic_improvement(cur_routes, all_customers, truck_capacity, 
                                                           demands_dict, service_time_dict, 

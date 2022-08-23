@@ -36,7 +36,7 @@ class VRPTW_Environment(gym.Env):
         self.cur_step = 0
         self._max_episode_steps = max_num_nodes_per_route*max_num_route
         self.max_episode_steps = self._max_episode_steps
-        self.switch_route_early_stop = (5 if self.mode == 'train' else 1)
+        self.switch_route_early_stop = (5 if self.mode == 'train' else 5)
         self.early_stop_steps = max_num_route * self.switch_route_early_stop
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
@@ -131,7 +131,7 @@ class VRPTW_Environment(gym.Env):
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
         self.cur_step = 0
-        self.switch_route_early_stop = (5 if self.mode == 'train' else 1)
+        self.switch_route_early_stop = (5 if self.mode == 'train' else 5)
         self.early_stop_steps = len(self.route_name_list) * self.switch_route_early_stop
         self.state = self.get_state()
         if self.save_data: self.local_experience_buffer = [np.copy(self.state)]
@@ -155,7 +155,8 @@ class VRPTW_Environment(gym.Env):
     def get_state(self):
         improvement_vec = np.zeros(max_num_nodes_per_route)
         route = self.cur_routes[self.cur_route_name]
-        for node_idx in range(min(max_num_nodes_per_route, len(route))):
+        improvement_vec[0] = 1.0
+        for node_idx in range(1, min(max_num_nodes_per_route, len(route))):
             improvement_vec[node_idx], _ = self.get_improve(route, node_idx)
         max_improvement, min_improvement = np.max(improvement_vec), np.min(improvement_vec)
         if max_improvement - min_improvement > 0.0: improvement_vec = (improvement_vec-min_improvement) / (max_improvement - min_improvement)
@@ -183,7 +184,7 @@ class VRPTW_Environment(gym.Env):
         return self.reward_shaping(cost_reduction), cur_routes
     
     def reward_shaping(self, cost_reduction):
-        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction)
+        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction/10.0)
 
     def step(self, action):
         node_idx = action
@@ -191,26 +192,22 @@ class VRPTW_Environment(gym.Env):
         assert node_idx < len(route), f"state: {self.state[0]}, node: {node_idx}, route: {len(route)}"
         self.cur_step += 1
         self.steps_not_improved += 1
-        self.steps_not_improvoed_same_route += 1
-        cost_reduction, _routes = self.get_improve(route, node_idx)
-        if cost_reduction > 0.0:
-            self.steps_not_improved = 0
-            self.steps_not_improvoed_same_route = 0
-            self.cur_routes = _routes
-            self.reward = 0.0
-        elif self.steps_not_improvoed_same_route >= self.switch_route_early_stop: 
+        if node_idx > 0:
+            cost_reduction, _routes = self.get_improve(route, node_idx)
+            if cost_reduction > 0.0:
+                self.steps_not_improved = 0
+                self.cur_routes = _routes
+            self.reward = cost_reduction
+        else:
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
-            self.steps_not_improvoed_same_route = 0
+            while True:
+                self.cur_route_name = self.route_name_list[self.cur_route_idx]
+                if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
+                self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
             self.reward = 0.0
-        else: self.reward = -1.0
-        while True:
-            self.cur_route_name = self.route_name_list[self.cur_route_idx]
-            if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
-            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
-        self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self._max_episode_steps))
-        if self.done: self.reward = (self.init_total_cost-self.get_route_cost()) / self.max_distance
-        if self.save_data and self.reward >= 0.0: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
+        self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self.max_episode_steps))
+        if self.save_data: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
         return self.state, self.reward, self.done, {}
 
     def switch_mode(self, mode):
@@ -220,7 +217,7 @@ class VRPTW_Environment(gym.Env):
         if self.save_data:
             loc_dir = f"{output_dir}/{self.problem_name}/"
             os.makedirs(loc_dir, exist_ok=True)
-            f = f"{loc_dir}/{self.rng.integers(0, 100000)}.pkl"
+            f = f"{loc_dir}/{self.rng.integers(0, 100000)}.dp"
             with open(f, "wb") as output_file:
                 cPickle.dump(self.local_experience_buffer, output_file)
 
@@ -235,8 +232,23 @@ def generate_env_data(idx, num_envs, instance, data_dir):
         while not done:
             action = env.rng.integers(min(int(state[0]), max_num_nodes_per_route))
             state, _, done, _ = env.step(action)
-            print("epoch: ", i, "problem: ", env.problem_name, "step: ", env.cur_step)
+            print("epoch: ", i, "problem: ", env.problem_name, "step: ", env.cur_step, "reward: ", env.reward)
         env.save_experience(f"{data_dir}/vrptw_{instance}/")
+        
+        
+def heuristic_improvement_on_env(idx, num_envs, instance, data_dir):
+    env = VRPTW_Environment(instance, data_dir, save_data=True, seed=idx)
+    for i in range(num_envs):
+        state = env.reset()
+        print("epoch: ", i, "problem: ", env.problem_name)
+        for _ in range(200):
+            cur_routes, total_cost, _ = heuristic_improvement(env.cur_routes, env.all_customers, env.truck_capacity, 
+                                                              env.demands_dict, env.service_time_dict, 
+                                                              env.earliest_start_dict, env.latest_end_dict,
+                                                              env.distance_matrix_dict)
+            env.cur_routes = cur_routes
+
+    
     
 import argparse
 import os
@@ -244,15 +256,20 @@ parser = argparse.ArgumentParser(description='Input of VRPTW Trainer')
 if __name__ == "__main__":
     parser.add_argument('--instance', type=str, default="ortec")
     parser.add_argument("--remote", action="store_true")
+    parser.add_argument("--mp", type=int, default=1)
     args = parser.parse_args()
     if args.remote:
         data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
     else:
         data_dir = "./"
-    procs = []
-    for idx in range(64):
-        proc = mp.Process(target=generate_env_data, args=(idx, 100, args.instance, data_dir))
-        procs.append(proc)
-        proc.start()
-    for proc in procs:
-        proc.join()
+
+    # if args.mp == 1: heuristic_improvement_on_env(1, 100, args.instance, data_dir)
+    if args.mp == 1: generate_env_data(1, 100, args.instance, data_dir)
+    else:
+        procs = []
+        for idx in range(args.mp):
+            proc = mp.Process(target=generate_env_data, args=(idx, 100, args.instance, data_dir))
+            procs.append(proc)
+            proc.start()
+        for proc in procs:
+            proc.join()

@@ -37,5 +37,5 @@ jobs:
 - name: vrptw_ortec
   sku: C64
   command:
-  - python drl/environments/VRPTW_Environment.py --remote --instance ortec
+  - python drl/environments/VRPTW_Environment.py --remote --instance ortec --mp 64
   # - python drl/results/VRPTW.py --remote --instance ortec --exp_name ortec --save_ep

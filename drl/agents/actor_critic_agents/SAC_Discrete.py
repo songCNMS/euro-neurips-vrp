@@ -159,10 +159,10 @@ class SAC_Discrete(SAC):
             done = False
             _total_reward = 0.0
             while not done:
-                action = self.actor_pick_action(state=state, eval=True)
+                action = self.actor_pick_action(state=state, eval=False)
                 state, reward, done, _ = self.eval_environment.step(action)
                 print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
-                if reward >= 0: _total_reward = reward
+                if reward >= 0: _total_reward += reward
             problem_reward_list.append(_total_reward)
             total_reward += _total_reward
             final_cost += self.eval_environment.get_route_cost()
@@ -175,17 +175,18 @@ class SAC_Discrete(SAC):
         print(" ")
         print("----------------------------")
         print("Episode score {} ".format(self.total_episode_score_so_far))
-        total_reward, init_cost, final_cost, hybrid_cost = self.eval()
-        res = {"cost_reduction": total_reward,
-                "init_cost": init_cost,
-                "final_cost": final_cost,
-                "hybrid_cost": hybrid_cost}
-        wandb.log(res)
-        self.eval_reward_list.append(total_reward)
-        print("Eval reward {}, best reward {} ".format(total_reward, np.max(self.eval_reward_list)))
-        print("History rewards: ", self.eval_reward_list)
-        print(res)
-        print("----------------------------")
+        # total_reward, init_cost, final_cost, hybrid_cost = self.eval()
+        # res = {"cost_reduction": total_reward,
+        #         "init_cost": init_cost,
+        #         "final_cost": final_cost,
+        #         "hybrid_cost": hybrid_cost}
+        # wandb.log(res)
+        # self.eval_reward_list.append(total_reward)
+        # print("Eval reward {}, best reward {} ".format(total_reward, np.max(self.eval_reward_list)))
+        # print("History rewards: ", self.eval_reward_list)
+        # print(res)
+        # print("----------------------------")
+        # if total_reward == np.max(self.eval_reward_list):
+        #     self.locally_save_policy("best")
         self.locally_save_policy(self.episode_number)
-        if total_reward == np.max(self.eval_reward_list):
-            self.locally_save_policy("best")
+        

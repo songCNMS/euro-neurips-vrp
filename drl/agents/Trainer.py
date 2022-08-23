@@ -10,8 +10,8 @@ import _pickle as cPickle
 from cvrptw_utility import max_num_nodes_per_route
 
 
-offline_steps = 1000
-eval_every_iterations = 100
+offline_steps = 10000
+eval_every_iterations = 500
 def offline_training(agent, instance):
     data_loc = f"./amlt/vrptw_data/vrptw_{instance}/"
     problem_list = sorted(os.listdir(data_loc))
@@ -31,12 +31,17 @@ def offline_training(agent, instance):
                 if action < max_num_nodes_per_route:
                     agent.save_experience(experience=(
                         state, action, reward, next_state, mask))
+        if len(agent.memory) >= 640:
+            for _ in range(10): agent.learn()
+            agent.episode_number += 1
+            if agent.episode_number % eval_every_iterations == 0: agent.print_summary_of_latest_evaluation_episode()
     print("memory size: ", len(agent.memory))
     for i in range(offline_steps):
         print("offline learning step", i, "starting")
         agent.learn()
+        agent.episode_number += 1
         print("offline learning step", i, "ending")
-        if (i+1) % eval_every_iterations == 0: agent.print_summary_of_latest_evaluation_episode()
+        if agent.episode_number % eval_every_iterations == 0: agent.print_summary_of_latest_evaluation_episode()
 
 class Trainer(object):
     """Runs games for given agents. Optionally will visualise and save the results"""
@@ -146,8 +151,8 @@ class Trainer(object):
             print(agent.hyperparameters)
             print("RANDOM SEED " , agent_config.seed)
             
-            # agent.locally_save_policy("best")
-            offline_training(agent, "ortec")
+            # agent.locally_save_policy("23500")
+            # offline_training(agent, "ortec")
             
             game_scores, rolling_scores, time_taken = agent.run_n_episodes()
             print("Time taken: {}".format(time_taken), flush=True)
