@@ -151,8 +151,9 @@ class Trainer(object):
             print(agent.hyperparameters)
             print("RANDOM SEED " , agent_config.seed)
             
-            agent.load_policy("224")
-            agent.episode_number = 224
+            if self.config.restore_checkpoint is not None:
+                agent.load_policy(self.config.restore_checkpoint)
+                agent.episode_number = int(self.config.restore_checkpoint)
             # offline_training(agent, "ortec")
             
             game_scores, rolling_scores, time_taken = agent.run_n_episodes()
