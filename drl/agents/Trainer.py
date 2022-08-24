@@ -151,7 +151,8 @@ class Trainer(object):
             print(agent.hyperparameters)
             print("RANDOM SEED " , agent_config.seed)
             
-            # agent.locally_save_policy("23500")
+            agent.load_policy("224")
+            agent.episode_number = 224
             # offline_training(agent, "ortec")
             
             game_scores, rolling_scores, time_taken = agent.run_n_episodes()

@@ -213,6 +213,10 @@ if __name__ == "__main__":
         agent_group = trainer.agent_to_agent_group[agent_name]
         agent_config.hyperparameters = agent_config.hyperparameters[agent_group]
         agent = AGENTS[0](agent_config)
+        
+        # agent.load_policy("224")
+        # total_reward, init_cost, final_cost, hybrid_cost = agent.eval()
+        
         total_eval_list = []
         while True:
             new_eval_list = []

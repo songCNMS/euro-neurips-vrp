@@ -36,7 +36,7 @@ class VRPTW_Environment(gym.Env):
         self.cur_step = 0
         self._max_episode_steps = max_num_nodes_per_route*max_num_route
         self.max_episode_steps = self._max_episode_steps
-        self.switch_route_early_stop = (5 if self.mode == 'train' else 5)
+        self.switch_route_early_stop = 1
         self.early_stop_steps = max_num_route * self.switch_route_early_stop
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
@@ -60,6 +60,7 @@ class VRPTW_Environment(gym.Env):
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
             # problem_list = [p for p in problem_list if (p.split('_')[0] in ["R1", "C1", "RC1"])]
+            # problem_list = ['ORTEC-VRPTW-ASYM-e2f2ccf7-d1-n285-k25.txt', 'ORTEC-VRPTW-ASYM-ca1ed34e-d1-n226-k21.txt', 'ORTEC-VRPTW-ASYM-02182cf8-d1-n327-k20.txt', 'ORTEC-VRPTW-ASYM-d9af647d-d1-n237-k16.txt']
             problem_file = self.rng.choice(problem_list)
             # problem_file = "ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
@@ -131,7 +132,7 @@ class VRPTW_Environment(gym.Env):
         self.steps_not_improved = 0
         self.steps_not_improvoed_same_route = 0
         self.cur_step = 0
-        self.switch_route_early_stop = (5 if self.mode == 'train' else 5)
+        self.switch_route_early_stop = 1
         self.early_stop_steps = len(self.route_name_list) * self.switch_route_early_stop
         self.state = self.get_state()
         if self.save_data: self.local_experience_buffer = [np.copy(self.state)]
@@ -154,13 +155,12 @@ class VRPTW_Environment(gym.Env):
             
     def get_state(self):
         improvement_vec = np.zeros(max_num_nodes_per_route)
-        route = self.cur_routes[self.cur_route_name]
+        cur_route = self.cur_routes.get(self.cur_route_name, [])
         improvement_vec[0] = 1.0
-        for node_idx in range(1, min(max_num_nodes_per_route, len(route))):
-            improvement_vec[node_idx], _ = self.get_improve(route, node_idx)
+        for node_idx in range(1, min(max_num_nodes_per_route, len(cur_route))):
+            improvement_vec[node_idx], _ = self.get_improve(cur_route, node_idx)
         max_improvement, min_improvement = np.max(improvement_vec), np.min(improvement_vec)
         if max_improvement - min_improvement > 0.0: improvement_vec = (improvement_vec-min_improvement) / (max_improvement - min_improvement)
-        cur_route = self.cur_routes[self.cur_route_name]
         cur_route_state = self.get_route_state(cur_route)
         cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
         cur_routes_encode_state[0, :] = cur_route_state
@@ -200,11 +200,11 @@ class VRPTW_Environment(gym.Env):
             self.reward = cost_reduction
         else:
             self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
-            while True:
-                self.cur_route_name = self.route_name_list[self.cur_route_idx]
-                if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
-                self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
             self.reward = 0.0
+        while True:
+            self.cur_route_name = self.route_name_list[self.cur_route_idx]
+            if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
+            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
         self.state = self.get_state()
         self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self.max_episode_steps))
         if self.save_data: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])

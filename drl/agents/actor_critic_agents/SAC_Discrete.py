@@ -147,7 +147,7 @@ class SAC_Discrete(SAC):
         problem_list = sorted(os.listdir(dir_name))
         # problem_list = [p for p in problem_list if (p.split('_')[0] in ["R1", "C1", "RC1"])]
         # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
-        # problem_list = ["ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt"]
+        # problem_list = ["ORTEC-VRPTW-ASYM-55a26fb1-d1-n326-k25.txt"]
         eval_rounds = min(5, len(problem_list))
         init_cost, final_cost, hybrid_cost = 0.0, 0.0, 0.0
         problem_reward_list = []
