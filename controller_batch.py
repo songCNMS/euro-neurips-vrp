@@ -10,7 +10,7 @@ from environment import VRPEnvironment
 import os
 from datetime import datetime
 import pandas as pd
-from cvrptw import compute_cost_from_routes
+from cvrptw_utility import compute_cost_from_routes
 
 
 

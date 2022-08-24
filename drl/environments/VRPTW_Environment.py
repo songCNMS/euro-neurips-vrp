@@ -14,12 +14,11 @@ from gym.utils import seeding
 from sknetwork.embedding import Spectral
 import _pickle as cPickle
 
-from cvrptw import read_input_cvrptw, compute_cost_from_routes
 import tools
-from cvrptw_heuristic import heuristic_improvement, get_problem_dict, generate_init_solution, route_validity_check, heuristic_improvement_with_candidates, compute_route_cost
-from cvrptw_utility import depot, device, feature_dim, max_num_nodes_per_route, max_num_route, \
-                    route_output_dim, selected_nodes_num, extract_features_for_nodes, extend_candidate_points, node_embedding_dim
-from cvrptw_hybrid_heuristic import construct_solution_from_ge_solver
+from cvrptw_utility import depot, feature_dim, max_num_nodes_per_route, max_num_route, get_problem_dict,\
+                    extract_features_for_nodes, extend_candidate_points, node_embedding_dim,\
+                        heuristic_improvement_with_candidates, compute_route_cost, read_input_cvrptw
+from rl_data_generate import construct_solution_from_ge_solver
 
 
 class VRPTW_Environment(gym.Env):
@@ -222,7 +221,6 @@ class VRPTW_Environment(gym.Env):
                 cPickle.dump(self.local_experience_buffer, output_file)
 
 
-
 def generate_env_data(idx, num_envs, instance, data_dir):
     env = VRPTW_Environment(instance, data_dir, save_data=True, seed=idx)
     for i in range(num_envs):
@@ -234,22 +232,8 @@ def generate_env_data(idx, num_envs, instance, data_dir):
             state, _, done, _ = env.step(action)
             print("epoch: ", i, "problem: ", env.problem_name, "step: ", env.cur_step, "reward: ", env.reward)
         env.save_experience(f"{data_dir}/vrptw_{instance}/")
-        
-        
-def heuristic_improvement_on_env(idx, num_envs, instance, data_dir):
-    env = VRPTW_Environment(instance, data_dir, save_data=True, seed=idx)
-    for i in range(num_envs):
-        state = env.reset()
-        print("epoch: ", i, "problem: ", env.problem_name)
-        for _ in range(200):
-            cur_routes, total_cost, _ = heuristic_improvement(env.cur_routes, env.all_customers, env.truck_capacity, 
-                                                              env.demands_dict, env.service_time_dict, 
-                                                              env.earliest_start_dict, env.latest_end_dict,
-                                                              env.distance_matrix_dict)
-            env.cur_routes = cur_routes
+    
 
-    
-    
 import argparse
 import os
 parser = argparse.ArgumentParser(description='Input of VRPTW Trainer')
@@ -263,7 +247,6 @@ if __name__ == "__main__":
     else:
         data_dir = "./"
 
-    # if args.mp == 1: heuristic_improvement_on_env(1, 100, args.instance, data_dir)
     if args.mp == 1: generate_env_data(1, 100, args.instance, data_dir)
     else:
         procs = []

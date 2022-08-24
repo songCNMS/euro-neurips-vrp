@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 import torch
 import math
@@ -108,6 +109,186 @@ def map_node_to_route(cur_routes):
     return node_to_route_dict
 
 
+def get_problem_dict(nb_customers,
+                     demands, service_time, 
+                     earliest_start, latest_end, max_horizon, 
+                     distance_warehouses, distance_matrix):
+    distance_matrix_dict = {}
+    demands_dict = {}
+    service_time_dict = {}
+    earliest_start_dict = {}
+    latest_end_dict = {}
+    all_customers = [f"Customer_{i}" for i in range(1, 1+nb_customers)]
+    for i, customer1 in enumerate([depot] + all_customers):
+        if i == 0:
+            demands_dict[customer1] = 0
+            service_time_dict[customer1] = 0
+            earliest_start_dict[customer1] = 0
+            latest_end_dict[customer1] = max_horizon
+        else:
+            demands_dict[customer1] = demands[i-1]
+            service_time_dict[customer1] = service_time[i-1]
+            earliest_start_dict[customer1] = earliest_start[i-1]
+            latest_end_dict[customer1] = latest_end[i-1]
+        distance_matrix_dict[customer1] = {}
+        for j, customer2 in enumerate([depot] + all_customers):
+            if i == 0 and j == 0: distance_matrix_dict[customer1][customer2] = 0.0
+            elif i == 0 and j > 0: distance_matrix_dict[customer1][customer2] = distance_warehouses[j-1]
+            elif i > 0 and j == 0: distance_matrix_dict[customer1][customer2] = distance_warehouses[i-1]
+            else: distance_matrix_dict[customer1][customer2] = distance_matrix[i-1][j-1]
+    return all_customers, demands_dict, service_time_dict, earliest_start_dict, latest_end_dict, distance_matrix_dict
+
+   
+def is_valid_pos(route, pos, customer, service_time, earliest_start, latest_end):
+    new_route = route[:pos] + [customer] + route[pos:]
+    return time_window_check(new_route, service_time, earliest_start, latest_end)
+
+def route_validity_check(cur_routes, nb_customers, truck_capacity, demands, service_time, earliest_start, latest_end):
+    num_customers = 0
+    for route in cur_routes.values():
+        if np.sum([demands[c] for c in route]) > truck_capacity or (not time_window_check(route, service_time, earliest_start, latest_end)):
+            return False
+        num_customers += len(route)
+    return num_customers == nb_customers
+
+def time_window_check(route, service_time, earliest_start, latest_end):
+    cur_time = 0.0
+    for r in [depot] + route + [depot]:
+        if cur_time > latest_end[r]: return False
+        cur_time = max(cur_time, earliest_start[r]) + service_time[r]
+    return True
+
+def time_window_check_partial_route(route, cur_time, service_time, earliest_start, latest_end):
+    for r in route + [depot]:
+        if cur_time > latest_end[r]:
+            return False
+        cur_time = max(cur_time, earliest_start[r]) + service_time[r]
+    return True
+
+def get_time_buffer_on_route(route, service_time, earliest_start, latest_end):
+    route_wth_depot = route + [depot]
+    step_buffer = np.zeros(len(route_wth_depot))
+    cur_time = earliest_start[depot] + service_time[depot]
+    min_buffer = np.zeros(len(route_wth_depot))
+    
+    for i, r in enumerate(route_wth_depot):
+        # print(route, [(earliest_start[r], service_time[r], latest_end[r]) for r in route])
+        assert cur_time <= latest_end[r], f"wrong route {route}, {[(earliest_start[r], service_time[r], latest_end[r]) for r in route]}"
+        # if cur_time > latest_end[r]: return min_buffer
+        step_buffer[i] = latest_end[r]-cur_time
+        cur_time = max(cur_time, earliest_start[r]) + service_time[r]
+    for i in range(len(route_wth_depot)-1, -1, -1):
+        if i == len(route_wth_depot)-1: min_buffer[i] = step_buffer[i]
+        else: min_buffer[i] = min(min_buffer[i+1], step_buffer[i])
+    return min_buffer
+
+def route_insertion_cost(route, customer, service_time, 
+                         earliest_start, latest_end,
+                         distance_matrix):
+    route_len = len(route)
+    min_cost = float("inf")
+    min_pos = None
+    cur_time = earliest_start[depot] + service_time[depot]
+    alpha = 1.0
+    # min_buffer = get_time_buffer_on_route(route, service_time, earliest_start, latest_end)
+    for i in range(route_len+1):
+        new_partial_route = [customer] + route[i:]
+        # if is_valid_pos(route, i, customer, service_time, earliest_start, latest_end):
+        if cur_time > latest_end[customer]: break
+        if time_window_check_partial_route(new_partial_route, cur_time, service_time, earliest_start, latest_end):
+            new_cur_time = max(cur_time, earliest_start[customer]) + service_time[customer]
+            time_increase = new_cur_time - cur_time
+            if i == 0:
+                old_cost = distance_matrix[depot][route[0]]
+                new_cost = distance_matrix[depot][customer] + distance_matrix[customer][route[0]]
+            elif i == route_len:
+                old_cost = distance_matrix[route[-1]][depot]
+                new_cost = distance_matrix[customer][depot] + distance_matrix[route[-1]][customer]
+            else:
+                old_cost = distance_matrix[route[i-1]][route[i]]
+                new_cost = distance_matrix[route[i-1]][customer] + distance_matrix[customer][route[i]]
+            cur_cost = alpha*(new_cost-old_cost) + (1-alpha)*time_increase
+            if cur_cost < min_cost: 
+                min_cost = cur_cost
+                min_pos = i
+        if i < route_len: cur_time = max(cur_time, earliest_start[route[i]]) + service_time[route[i]]
+    return min_cost, min_pos
+
+
+def compute_route_cost(routes, distance_matrix):
+    total_cost = 0.0
+    for route in routes.values():
+        total_cost += distance_matrix[depot][route[0]]
+        for i in range(len(route)-1):
+            total_cost += distance_matrix[route[i]][route[i+1]]
+        total_cost += distance_matrix[route[-1]][depot]
+    return total_cost
+
+
+def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity, demands, service_time, 
+                                          earliest_start, latest_end,
+                                          distance_matrix):
+    ori_total_cost = compute_route_cost(cur_routes, distance_matrix)
+    routes_before_insert = {}
+    for route_name, route in cur_routes.items():
+        new_route = [c for c in route if c not in customers]
+        if len(new_route) > 0: routes_before_insert[route_name] = new_route
+    customer_to_route_dict = {}
+    for c in customers:
+        route_cost_list = sorted([(route_name, route_insertion_cost(route, c, service_time, 
+                                  earliest_start, latest_end,
+                                  distance_matrix))
+                                  for route_name, route in routes_before_insert.items()], key=lambda x: x[1][0])
+        customer_to_route_dict[c] = [x for x in route_cost_list[:min(2, len(route_cost_list))] if (x[1][1] is not None)]
+    
+    min_total_cost_increase = float("inf")
+    new_routes_after_insertion = None
+    for i in range(2**(len(customers))):
+        idx_list = [(i//(2**j))%2 for j in range(len(customers))]
+        if np.any([idx+1>len(customer_to_route_dict[c]) for idx, c in zip(idx_list, customers)]): continue
+        customer_on_route = {}
+        for idx, c in zip(idx_list, customers):
+            route_name = customer_to_route_dict[c][idx][0]
+            if route_name not in customer_on_route:
+                customer_on_route[route_name] = [c]
+            else: customer_on_route[route_name].append(c)
+        valid_insertion = True
+        total_cost_increase = 0.0
+        routes_after_insertion = {}
+        for route_name, customers_to_insert in customer_on_route.items():
+            if not valid_insertion: break
+            new_route = routes_before_insert[route_name][:]
+            for c in customers_to_insert:
+                if np.sum([demands[_c] for _c in new_route]) + demands[c] > truck_capacity: 
+                    valid_insertion = False
+                    break
+                min_cost, min_pos = route_insertion_cost(new_route, c, service_time, 
+                                                         earliest_start, latest_end,
+                                                         distance_matrix)
+                if min_pos is None:
+                    valid_insertion = False
+                    break
+                else: 
+                    new_route = new_route[:min_pos] + [c] + new_route[min_pos:]
+                    total_cost_increase += min_cost
+            routes_after_insertion[route_name] = new_route
+        
+        if valid_insertion and total_cost_increase < min_total_cost_increase:
+            min_total_cost_increase = total_cost_increase
+            new_routes_after_insertion = {route_name: route[:] for route_name, route in routes_after_insertion.items()}
+    final_routes = cur_routes
+    cost_reduction = None
+    if not math.isinf(min_total_cost_increase):
+        new_routes = {}
+        for route_name, route in routes_before_insert.items():
+            if route_name in new_routes_after_insertion: new_routes[route_name] = new_routes_after_insertion[route_name]
+            else: new_routes[route_name] = route
+        new_route_cost = compute_route_cost(new_routes, distance_matrix)
+        if new_route_cost < ori_total_cost:
+            final_routes = new_routes
+        cost_reduction = ori_total_cost - new_route_cost
+    return final_routes, ori_total_cost, cost_reduction
+
 if torch.cuda.is_available(): device = "cuda:0"
 else: device = "cpu"
 
@@ -152,34 +333,6 @@ class Route_MLP_Model(torch.nn.Module):
     def forward(self, x):
         return self.mlp(x)
 
-
-class MLP_Model(torch.nn.Module):
-    def __init__(self):
-        super(MLP_Model, self).__init__()
-        self.route_model = Route_Model()
-        self.candidate_model = torch.nn.Linear(2*feature_dim, 64)
-        self.fc1 = torch.nn.Linear(route_output_dim+64, 128)
-        self.fc2 = torch.nn.Linear(128, 128)
-        self.fc3 = torch.nn.Linear(128, 1)
-        self.dropout = torch.nn.Dropout(p=0.2)
-        torch.nn.init.xavier_uniform_(self.fc1.weight)
-        torch.nn.init.xavier_uniform_(self.fc2.weight)
-        torch.nn.init.xavier_uniform_(self.fc3.weight)
-        
-    def forward(self, candidates, customers):
-        x_c = self.candidate_model(candidates)
-        route_rnn_output_list = []
-        for i in range(max_num_route):
-            x_r = customers[:, i, :]
-            x_r, _ = self.route_model(x_r)
-            x_r = x_r[-1, :, :]
-            route_rnn_output_list.append(x_r)
-        x_r = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
-        x_r = self.dropout(self.x_r)
-        x = torch.cat((x_r, x_c), axis=1)
-        dout = torch.tanh(self.fc1(x))
-        dout = torch.tanh(self.fc2(dout))
-        return self.fc3(dout)
     
    
 class MLP_RL_Model(torch.nn.Module):
@@ -249,90 +402,6 @@ def get_route_mask(route_nums):
     return route_num_mask, route_len_mask
     
 
-class MLP_Route_RL_Model(torch.nn.Module):
-    def __init__(self, hyperparameters):
-        super(MLP_Route_RL_Model, self).__init__()
-        self.mlp_route = hyperparameters["linear_route"]
-        self.route_model = Route_Model()
-        self.final_layer = torch.nn.Softmax(dim=1)
-        self.node_selection_mlp = NN(input_dim=route_output_dim*2, 
-                                    layers_info=hyperparameters["linear_hidden_units"] + [max_num_nodes_per_route],
-                                    output_activation=None,
-                                    batch_norm=hyperparameters["batch_norm"], dropout=hyperparameters["dropout"],
-                                    hidden_activations=hyperparameters["hidden_activations"], initialiser=hyperparameters["initialiser"],
-                                    columns_of_data_to_be_embedded=hyperparameters["columns_of_data_to_be_embedded"],
-                                    embedding_dimensions=hyperparameters["embedding_dimensions"], y_range=hyperparameters["y_range"],
-                                    random_seed=hyperparameters["seed"])
-
-    def forward(self, state):
-        num_samples = state.size(0)
-        route_nums = state[num_samples, :max_num_route]
-        _, route_len_mask = get_route_mask(route_nums)
-        customers = state[num_samples, max_num_route:]
-        customers = customers.reshape(num_samples, max_num_route, max_num_nodes_per_route*feature_dim)
-        route_rnn_output_list = []
-        for i in range(max_num_route):
-            x_r = customers[:, i, :]
-            x_r, _ = self.route_model(x_r)
-            x_r = x_r[-1, :, :]
-            route_rnn_output_list.append(x_r)
-        x_g = torch.stack(route_rnn_output_list, dim=1)
-        x_g_mean = x_g.mean(axis=1)
-        node_out = []
-        for i in range(max_num_route):
-            r = route_rnn_output_list[i]
-            node_selection_in = torch.cat((r, x_g_mean), axis=1)
-            node_selection_out = self.node_selection_mlp(node_selection_in)
-            node_selection_out = self.final_layer(node_selection_out)
-            node_selection_out = torch.mul(node_selection_out, route_len_mask)
-            node_out.append(node_selection_out)
-        node_out = torch.cat(node_out, axis=1)
-        return node_selection_out
-
-
-def acc_mrse_compute(pred, label):
-    pred = pred.cpu().data.numpy()
-    label = label.cpu().data.numpy()
-    return math.sqrt(np.mean((pred-label)**2))
-
-
-def transform_customers_data(num_samples, customer_features):
-    customers = np.zeros((num_samples, max_num_route, max_num_nodes_per_route*feature_dim))
-    customer_features = customer_features.reshape(num_samples, -1)
-    for i in range(num_samples):
-        j = -1 # route idx
-        k = 0 # node idx on current route
-        all_routes_features = customer_features[i, :]
-        for l in range(selected_nodes_num):
-            if np.sum(all_routes_features[l*feature_dim:]==0): break
-            elif np.sum(all_routes_features[l:feature_dim:(l+1)*feature_dim]) == 0:
-                j += 1
-                k = 0
-            elif k >= max_num_nodes_per_route-1: break
-            else:
-                customers[i, j, feature_dim*k:feature_dim*(k+1)] = all_routes_features[l:feature_dim:(l+1)*feature_dim]
-                k += 1
-    customers = customers.astype(np.float32)
-    return customers
-
-
-def transform_data(candidate_features, customer_features, costs):
-    labels = costs.astype(np.float32)
-    num_samples = len(costs)
-    candidates = candidate_features.reshape(num_samples, -1).astype(np.float32)
-    customers = transform_customers_data(num_samples, customer_features)
-    return candidates, customers, labels
-
-class VRPTWDataset(Dataset):
-    def __init__(self, candidate_features, customer_features, costs):
-        self.candidates, self.customers, self.labels = transform_data(candidate_features, customer_features, costs)
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return self.candidates[idx, :], self.customers[idx, :, :], self.labels[idx]
-
 def extend_candidate_points(route, node_idx, distance_matrix, all_customers):
     if len(route) <= 2: 
         M = route[:]
@@ -358,59 +427,148 @@ def select_candidate_points(routes, distance_matrix, all_customers, only_short_r
     M = extend_candidate_points(route, node_idx, distance_matrix, all_customers)
     return M
 
-def random_choice(ll, probs):
-    r = np.random.random()
-    cp = 0
-    for i, p in enumerate(probs):
-        cp += p
-        if cp >= r: return ll[i]
-    return ll[-1]
 
-def select_candidate_points_ML(model, routes, distance_matrix, 
-                               truck_capacity, all_customers,
-                               demands, service_time,
-                               earliest_start, latest_end,
-                               max_distance):
-    total_num_candidates = -1
-    all_candidates = []
-    candidates_list = []
-    customers_list = []
-    node_to_route_dict = map_node_to_route(routes)
-    customers_features = get_customers_features(node_to_route_dict, routes, truck_capacity,
-                                                demands, service_time, earliest_start,
-                                                latest_end, distance_matrix, max_distance)
-    for route_name, route in routes.items():
-        for node_idx in range(len(route)-1):
-            if total_num_candidates > 0 and np.random.random() > total_num_candidates / len(all_customers): continue
-            candidate_points = [route[node_idx]]
-            if node_idx == len(route)-2: candidate_points.append(depot)
-            else: candidate_points.append(route[node_idx+1])
-            candidates_feature = \
-                         get_candidate_feateures(candidate_points, node_to_route_dict,
-                                                 routes, truck_capacity,
-                                                 demands, service_time,
-                                                 earliest_start, latest_end,
-                                                 distance_matrix, max_distance)
-            all_candidates.append((route_name, node_idx))
-            candidates_list.append(candidates_feature)
-            customers_list.append(customers_features)
-    _candidates = np.concatenate(candidates_list, axis=0)
-    _customers = np.concatenate(customers_list, axis=0)
-    _costs = np.zeros(len(candidates_list))
-    candidates, customers, labels = transform_data(_candidates, _customers, _costs)
-    candidates_ts = torch.from_numpy(candidates).to(device)
-    customers_ts = torch.from_numpy(customers).to(device)
-    with torch.no_grad():
-        predict_cost_reductions = model(candidates_ts, customers_ts).squeeze(axis=1).cpu().detach().numpy()
-    # candidates_with_cost = []
-    # for (route_name, node_idx), cost in zip(all_candidates, predict_cost_reductions):
-    #     candidates_with_cost.append((cost, (route_name, node_idx)))
-    # sorted_candidates = sorted(candidates_with_cost, key=lambda x: x[0], reverse=True)
-    # idx = np.random.randint(0, min(50, len(sorted_candidates)))
-    min_cost, max_cost = np.min(predict_cost_reductions), np.max(predict_cost_reductions)
-    norm_cost = [round((x-min_cost)/max_cost, 2) for x in predict_cost_reductions]
-    probs = [c/np.sum(norm_cost) for c in norm_cost]
-    i = random_choice(list(range(len(all_candidates))), probs)
-    route_name, node_idx = all_candidates[i]
-    M = extend_candidate_points(route_name, routes, node_idx, distance_matrix, all_customers)
-    return M
+def read_elem(filename):
+    with open(filename) as f:
+        return [str(elem) for elem in f.read().split()]
+
+# The input files follow the "Solomon" format.
+def read_input_cvrptw(filename):
+    file_it = iter(read_elem(filename))
+
+    for i in range(4): next(file_it)
+
+    nb_trucks = int(next(file_it))
+    truck_capacity = int(next(file_it))
+
+    for i in range(13): next(file_it)
+
+    warehouse_x = int(next(file_it))
+    warehouse_y = int(next(file_it))
+
+    for i in range(2): next(file_it)
+
+    max_horizon = int(next(file_it))
+
+    next(file_it)
+
+    customers_x = []
+    customers_y = []
+    demands = []
+    earliest_start = []
+    latest_end = []
+    service_time = []
+
+    while (1):
+        val = next(file_it, None)
+        if val is None: break
+        i = int(val) - 1
+        customers_x.append(int(next(file_it)))
+        customers_y.append(int(next(file_it)))
+        demands.append(int(next(file_it)))
+        ready = int(next(file_it))
+        due = int(next(file_it))
+        stime = int(next(file_it))
+        earliest_start.append(ready)
+        latest_end.append(due + stime)  # in input files due date is meant as latest start time
+        service_time.append(stime)
+
+    nb_customers = i + 1
+
+    # Compute distance matrix
+    distance_matrix = compute_distance_matrix(customers_x, customers_y)
+    distance_warehouses = compute_distance_warehouses(warehouse_x, warehouse_y, customers_x, customers_y)
+
+    return (nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
+            earliest_start, latest_end, max_horizon, warehouse_x, warehouse_y, customers_x, customers_y)
+
+
+# Computes the distance matrix
+def compute_distance_matrix(customers_x, customers_y):
+    nb_customers = len(customers_x)
+    distance_matrix = [[None for i in range(nb_customers)] for j in range(nb_customers)]
+    for i in range(nb_customers):
+        distance_matrix[i][i] = 0
+        for j in range(nb_customers):
+            dist = compute_dist(customers_x[i], customers_x[j], customers_y[i], customers_y[j])
+            distance_matrix[i][j] = dist
+            distance_matrix[j][i] = dist
+    return distance_matrix
+
+
+# Computes the distances to warehouse
+def compute_distance_warehouses(depot_x, depot_y, customers_x, customers_y):
+    nb_customers = len(customers_x)
+    distance_warehouses = [None] * nb_customers
+    for i in range(nb_customers):
+        dist = compute_dist(depot_x, customers_x[i], depot_y, customers_y[i])
+        distance_warehouses[i] = dist
+    return distance_warehouses
+
+
+def compute_dist(xi, xj, yi, yj):
+    return int(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)))
+    # return int(round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)*100)
+
+def compute_dist_float(xi, xj, yi, yj):
+    return round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)
+
+
+def compute_cost_from_routes(cur_routes, coords):
+    total_cost = 0.0
+    for j in range(len(cur_routes)):
+        _route = [0] + list(cur_routes[j]) + [0]
+        for i in range(len(_route)-1):
+            total_cost += compute_dist_float(coords[_route[i]][0], coords[_route[i+1]][0], coords[_route[i]][1], coords[_route[i+1]][1])
+    return round(total_cost, 2)
+
+
+# depots = dat.depots1
+# LOCATION_NAME   LATITUDE   LONGITUDE  TIME_WINDOW_START  TIME_WINDOW_END  MAXIMUM_CAPACITY
+
+# customers = dat.customers1
+# LOCATION_NAME   LATITUDE   LONGITUDE  STOP_TIME  TIME_WINDOW_START  TIME_WINDOW_END  DEMAND
+
+# transportation_matrix = dat.transportation_matrix1
+# FROM_LOCATION_NAME TO_LOCATION_NAME  FROM_LATITUDE  FROM_LONGITUDE  TO_LATITUDE  TO_LONGITUDE  DRIVE_MINUTES  HAVERSINE_DISTANCE_MILES  TRANSPORTATION_COST
+
+# vehicles = dat.vehicles1.head(15)
+# VEHICLE_NAME  CAPACITY  VEHICLE_FIXED_COST
+
+# capacity = vehicles.iloc[0, :]['CAPACITY']
+
+def solomon2df(nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
+                earliest_start, latest_end, max_horizon, warehouse_x, warehouse_y, customers_x, customers_y):
+    depots = pd.DataFrame(data={"LOCATION_NAME": ["depot"],
+                                "LATITUE": [warehouse_x], "LONGITUDE": [warehouse_y],
+                                "TIME_WINDOW_START": [0], "TIME_WINDOW_END": [max_horizon],
+                                "MAXIMUM_CAPACITY": [5*np.sum(demands)]})
+    customers_data = []
+    customer_names = []
+    for i in range(nb_customers):
+        customer_names.append(f"Customer_{i}")
+        customers_data.append([f"Customer_{i}", customers_x[i], customers_y[i], service_time[i],
+                                 earliest_start[i],  latest_end[i], demands[i]])
+    customers = pd.DataFrame(data=customers_data, columns="LOCATION_NAME   LATITUDE   LONGITUDE  STOP_TIME  TIME_WINDOW_START  TIME_WINDOW_END  DEMAND".split())
+    transportation_matrix_data = []
+    for i in range(nb_customers):
+        for j in range(nb_customers):
+            transportation_matrix_data.append([customer_names[i], customer_names[j],
+                                               customers_x[i], customers_y[i],
+                                               customers_x[j], customers_y[j],
+                                               0, 0, distance_matrix[i][j]])
+        transportation_matrix_data.append([customer_names[i], "depot",
+                                            customers_x[i], customers_y[i],
+                                            warehouse_x, warehouse_y,
+                                            0, 0, distance_warehouses[i]])
+        transportation_matrix_data.append(["depot", customer_names[i],
+                                            warehouse_x, warehouse_y,
+                                            customers_x[i], customers_y[i],
+                                            0, 0, distance_warehouses[i]])
+
+    transportation_matrix = pd.DataFrame(data=transportation_matrix_data, columns="FROM_LOCATION_NAME TO_LOCATION_NAME  FROM_LATITUDE  FROM_LONGITUDE  TO_LATITUDE  TO_LONGITUDE  DRIVE_MINUTES  HAVERSINE_DISTANCE_MILES  TRANSPORTATION_COST".split())
+    vehicles_data = []
+    for i in range(nb_trucks):
+        vehicles_data.append([f"vehicle_{i}", truck_capacity, 1])
+    vehicles = pd.DataFrame(data=vehicles_data, columns="VEHICLE_NAME  CAPACITY  VEHICLE_FIXED_COST".split())
+    return depots, customers, transportation_matrix, vehicles

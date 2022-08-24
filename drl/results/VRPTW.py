@@ -17,7 +17,7 @@ from agents.DQN_agents.DQN import DQN
 from agents.DQN_agents.DQN_With_Fixed_Q_Targets import DQN_With_Fixed_Q_Targets
 from utilities.data_structures.Config import Config
 from environments.VRPTW_Environment import VRPTW_Environment
-from cvrptw_utility import device, max_num_nodes_per_route
+from cvrptw_utility import device
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 import random

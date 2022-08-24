@@ -1,6 +1,3 @@
-from cvrptw_utility import MLP_RL_Model
-from drl.environments.VRPTW_Environment import VRPTW_Environment
-from drl.environments.VRPTW_Route_Environment import VRPTW_Route_Environment
 import torch
 from torch.optim import Adam
 import torch.nn.functional as F
@@ -9,7 +6,7 @@ from agents.Base_Agent import Base_Agent
 from utilities.data_structures.Replay_Buffer import Replay_Buffer
 from agents.actor_critic_agents.SAC import SAC
 from utilities.Utility_Functions import create_actor_distribution
-from cvrptw_utility import MLP_RL_Model, MLP_Route_RL_Model
+from cvrptw_utility import MLP_RL_Model
 import wandb
 import pandas as pd
 import os

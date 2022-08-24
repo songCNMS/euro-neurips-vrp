@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import threading
 from environment import VRPEnvironment
-from cvrptw import compute_cost_from_routes
+from cvrptw_utility import compute_cost_from_routes
 
 
 if __name__ == "__main__":

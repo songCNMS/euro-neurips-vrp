@@ -1,7 +1,7 @@
 import json
 import os
 import numpy as np
-from cvrptw import read_input_cvrptw
+from cvrptw_utility import read_input_cvrptw
 
 
 # https://stackoverflow.com/questions/26646362/numpy-array-is-not-json-serializable
