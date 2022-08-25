@@ -7,14 +7,12 @@ import sys
 import numpy as np
 import threading
 from environment import VRPEnvironment
-from cvrptw_utility import compute_cost_from_routes
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--instance", help="Instance to solve")
-    parser.add_argument("--problem", help="problem to solve")
     parser.add_argument("--instance_seed", type=int, default=1, help="Seed to use for the dynamic instance")
     parser.add_argument("--static", action='store_true', help="Add this flag to solve the static variant of the problem (by default dynamic)")
     parser.add_argument("--epoch_tlim", type=int, default=120, help="Time limit per epoch")
@@ -27,15 +25,10 @@ if __name__ == "__main__":
         sys.exit()
 
     args = parser.parse_args(sys.argv[1:split_idx])
-    
-    is_solo = (args.instance != 'ortec')
-    
     solver_cmd = sys.argv[split_idx+1:]
 
     # Load instance
-    problem_file = f"cvrp_benchmarks/homberger_{args.instance}_customer_instances/{args.problem}"
-    if is_solo: static_instance = tools.read_solomon(problem_file)
-    else: static_instance = tools.read_vrplib(problem_file)
+    static_instance = tools.read_vrplib(args.instance)
 
     # Create environment
     env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim, args.static)
@@ -88,12 +81,7 @@ if __name__ == "__main__":
 
     assert done, "Environment is not finished"
     # Write results
-    if is_solo:
-        route_num = len(env.final_solutions[env.end_epoch])
-        print(env.final_solutions[env.end_epoch])
-        total_cost = compute_cost_from_routes(env.final_solutions[env.end_epoch], static_instance['coords'])
-    else: route_num, total_cost = len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values())
     print(f"------ Controller ------")
-    print(f"Cost of solution: {total_cost}")
+    print(f"Cost of solution: {sum(env.final_costs.values())}")
     print("Solution:")
     print(tools.json_dumps_np(env.final_solutions))

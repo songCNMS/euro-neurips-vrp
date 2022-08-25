@@ -10,7 +10,84 @@ import numpy as np
 import tools
 from environment import VRPEnvironment, ControllerEnvironment
 from baselines.strategies import STRATEGIES
+from cvrptw_utility import extend_candidate_points, heuristic_improvement_with_candidates, get_problem_dict
 
+
+# self.epoch_instance = {
+#                 'is_depot': self.instance['is_depot'],
+#                 'customer_idx': np.arange(len(self.instance['coords'])),
+#                 'request_idx': np.arange(len(self.instance['coords'])),
+#                 'coords': self.instance['coords'],
+#                 'demands': self.instance['demands'],
+#                 'capacity': self.instance['capacity'],
+#                 'time_windows': self.instance['time_windows'],
+#                 'service_times': self.instance['service_times'],
+#                 'duration_matrix': self.instance['duration_matrix'],
+#                 'must_dispatch': ~self.instance['is_depot'],
+#             }
+#             return {
+#                 'current_epoch': self.current_epoch,
+#                 'current_time': 0,
+#                 'planning_starttime': 0,
+#                 'epoch_instance': self.epoch_instance
+#             }
+
+def get_instance_dict(instance):
+    distance_matrix_dict = {}
+    demands_dict = {}
+    service_time_dict = {}
+    earliest_start_dict = {}
+    latest_end_dict = {}
+    nb_customers = len(instance["demands"])
+    depot = "Customer_0"
+    all_customers = [f"Customer_{i}" for i in range(1, nb_customers)]
+    for i, customer1 in enumerate([depot] + all_customers):
+        demands_dict[customer1] = instance["demands"][i]
+        service_time_dict[customer1] = instance["service_times"][i]
+        earliest_start_dict[customer1] = instance['time_windows'][i, 0]
+        latest_end_dict[customer1] = instance['time_windows'][i, 1]
+        distance_matrix_dict[customer1] = {}
+        for j, customer2 in enumerate([depot] + all_customers):
+            distance_matrix_dict[customer1][customer2] = instance['duration_matrix'][i, j]
+    return all_customers, demands_dict, service_time_dict, earliest_start_dict, latest_end_dict, distance_matrix_dict
+
+
+def hybrid_solve_static_vrptw(instance, time_limit=360, tmp_dir="tmp", seed=1, verbose=False):
+    rng = np.random.default_rng(seed)
+    solutions = list(solve_static_vrptw(instance, time_limit=time_limit, seed=seed, tmp_dir=tmp_dir))
+    # assert len(solutions) >= 1, "failed to init"
+    init_routes, total_cost = solutions[-1]
+    cur_routes = {}
+    for i, route in enumerate(init_routes):
+        path_name = f"PATH{i}"
+        cur_routes[path_name] = [f"Customer_{c}" for c in route]
+    all_customers, demands_dict, service_time_dict, \
+        earliest_start_dict, latest_end_dict, distance_matrix_dict \
+            = get_instance_dict(instance)
+    truck_capacity = instance["capacity"]
+    num_episodes = 20000
+    early_stop_rounds = 200
+    cost_reduction_list = []
+    if verbose: log(f"init cost: {total_cost}", newline=True, flush=True)
+    for i in range(num_episodes):
+        route_name_list = list(cur_routes.keys())
+        route_idx = rng.integers(len(route_name_list))
+        route = cur_routes[route_name_list[route_idx]]
+        node_idx = rng.integers(len(route))
+        M = extend_candidate_points(route, node_idx, distance_matrix_dict, all_customers)
+        cur_routes, _, cost_reduction =\
+                heuristic_improvement_with_candidates(cur_routes, M, truck_capacity, 
+                                                    demands_dict, service_time_dict, 
+                                                    earliest_start_dict, latest_end_dict,
+                                                    distance_matrix_dict)
+        if verbose: log(f"{i} improvement: {cost_reduction}, route: {route_name_list[route_idx]}, node_idx: {node_idx}", newline=True, flush=True)
+        cost_reduction_list.append(max(0.0, (0.0 if cost_reduction is None else cost_reduction)))
+        if len(cost_reduction_list) > early_stop_rounds and np.max(cost_reduction_list[-early_stop_rounds]) <= 0.0: break
+    solution = []
+    for _, route in cur_routes.items(): solution.append(np.array([int(c.split('_')[-1]) for c in route]))
+    cost = tools.validate_static_solution(instance, solution)
+    yield solution, cost
+    return
 
 def solve_static_vrptw(instance, time_limit=3600, tmp_dir="tmp", seed=1):
 
@@ -62,6 +139,7 @@ def solve_static_vrptw(instance, time_limit=3600, tmp_dir="tmp", seed=1):
             elif "EXCEPTION" in line:
                 raise Exception("HGS failed with exception: " + line)
         assert len(routes) == 0, "HGS has terminated with imcomplete solution (is the line with Cost missing?)"
+    
 
 
 def run_oracle(args, env):
@@ -147,6 +225,61 @@ def run_baseline(args, env, oracle_solution=None):
     return total_reward
 
 
+def run_rl_solution(args, env, oracle_solution=None):
+    rng = np.random.default_rng(args.solver_seed)
+    total_reward = 0
+    done = False
+    # Note: info contains additional info that can be used by your solver
+    observation, static_info = env.reset()
+    epoch_tlim = static_info['epoch_tlim']
+    num_requests_postponed = 0
+    while not done:
+        epoch_instance = observation['epoch_instance']
+        if args.verbose:
+            log(f"Epoch {static_info['start_epoch']} <= {observation['current_epoch']} <= {static_info['end_epoch']}", newline=False)
+            num_requests_open = len(epoch_instance['request_idx']) - 1
+            num_new_requests = num_requests_open - num_requests_postponed
+            log(f" | Requests: +{num_new_requests:3d} = {num_requests_open:3d}, {epoch_instance['must_dispatch'].sum():3d}/{num_requests_open:3d} must-go...", newline=False, flush=True)
+
+        
+        if oracle_solution is not None:
+            request_idx = set(epoch_instance['request_idx'])
+            epoch_solution = [route for route in oracle_solution if len(request_idx.intersection(route)) == len(route)]
+            cost = tools.validate_dynamic_epoch_solution(epoch_instance, epoch_solution)
+        else:
+            # Select the requests to dispatch using the strategy
+            # TODO improved better strategy (machine learning model?) to decide which non-must requests to dispatch
+            epoch_instance_dispatch = STRATEGIES[args.strategy](epoch_instance, rng)
+
+            # Run HGS with time limit and get last solution (= best solution found)
+            # Note we use the same solver_seed in each epoch: this is sufficient as for the static problem
+            # we will exactly use the solver_seed whereas in the dynamic problem randomness is in the instance
+            solutions = list(hybrid_solve_static_vrptw(epoch_instance_dispatch, time_limit=epoch_tlim, tmp_dir=args.tmp_dir, seed=args.solver_seed, verbose=args.verbose))
+            assert len(solutions) > 0, f"No solution found during epoch {observation['current_epoch']}"
+            epoch_solution, cost = solutions[-1]
+
+            # Map HGS solution to indices of corresponding requests
+            epoch_solution = [epoch_instance_dispatch['request_idx'][route] for route in epoch_solution]
+        
+        if args.verbose:
+            num_requests_dispatched = sum([len(route) for route in epoch_solution])
+            num_requests_open = len(epoch_instance['request_idx']) - 1
+            num_requests_postponed = num_requests_open - num_requests_dispatched
+            log(f" {num_requests_dispatched:3d}/{num_requests_open:3d} dispatched and {num_requests_postponed:3d}/{num_requests_open:3d} postponed | Routes: {len(epoch_solution):2d} with cost {cost:6d}")
+
+        # Submit solution to environment
+        observation, reward, done, info = env.step(epoch_solution)
+        assert cost is None or reward == -cost, f"Reward should be negative cost of solution, {reward}, {cost}"
+        assert not info['error'], f"Environment error: {info['error']}"
+        
+        total_reward += reward
+
+    if args.verbose:
+        log(f"Cost of solution: {-total_reward}")
+
+    return total_reward
+
+
 def log(obj, newline=True, flush=False):
     # Write logs to stderr since program uses stdout to communicate with controller
     sys.stderr.write(str(obj))
@@ -160,6 +293,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", type=str, default='greedy', help="Baseline strategy used to decide whether to dispatch routes")
+    parser.add_argument("--solver", type=str, default='baseline', help="Baseline strategy used to decide whether to dispatch routes")
     # Note: these arguments are only for convenience during development, during testing you should use controller.py
     parser.add_argument("--instance", help="Instance to solve")
     parser.add_argument("--instance_seed", type=int, default=1, help="Seed to use for the dynamic instance")
@@ -194,8 +328,11 @@ if __name__ == "__main__":
 
         if args.strategy == 'oracle':
             run_oracle(args, env)
-        else:
-            run_baseline(args, env)
+        else: 
+            if args.solver == 'rl':
+                run_rl_solution(args, env)
+            else:
+                run_baseline(args, env)
 
         if args.instance is not None:
             log(tools.json_dumps_np(env.final_solutions))
