@@ -156,7 +156,7 @@ class SAC_Discrete(SAC):
             done = False
             _total_reward = 0.0
             while not done:
-                action = self.actor_pick_action(state=state, eval=False)
+                action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
                 print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
                 if reward >= 0: _total_reward += reward

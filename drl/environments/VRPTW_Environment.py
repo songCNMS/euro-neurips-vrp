@@ -183,7 +183,7 @@ class VRPTW_Environment(gym.Env):
         return self.reward_shaping(cost_reduction), cur_routes
     
     def reward_shaping(self, cost_reduction):
-        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction/10.0)
+        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction/100.0)
 
     def step(self, action):
         node_idx = action

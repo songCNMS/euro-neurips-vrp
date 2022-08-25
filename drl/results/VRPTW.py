@@ -87,6 +87,7 @@ if __name__ == "__main__":
     config.linear_route = True
     config.is_vec_env = True
     config.cost_reduction = False
+    config.restore_checkpoint = None
 
     config.hyperparameters = {
         "DQN_Agents": {
@@ -191,8 +192,7 @@ if __name__ == "__main__":
             "do_evaluation_iterations": True,
             "greedy_exploration": True,
             "start_exploration_rate": 1.0,
-            "end_exploration_rate": 0.1,
-            "restore_checkpoint": None
+            "end_exploration_rate": 0.1
         }
     }
 
