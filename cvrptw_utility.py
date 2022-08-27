@@ -1,16 +1,22 @@
+from re import I
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 import torch
 import math
 from nn_builder.pytorch.NN import NN
+import tools
+from pulp import *
+import elkai
+import sys
+import lkh
 
 
 route_output_dim = 128
 max_num_route = 48
 max_num_nodes_per_route = 24
 node_embedding_dim = 32
-depot = "Customer_0"
+depot = 0
 feature_dim = 4+node_embedding_dim # (service_time, earlieast_time, latest_time, demand) + node_embedding
 selected_nodes_num = 900
 
@@ -168,49 +174,33 @@ def time_window_check_partial_route(route, cur_time, service_time, distance_matr
         prev_node = r
     return True
 
-def get_time_buffer_on_route(route, service_time, earliest_start, latest_end):
-    route_wth_depot = route + [depot]
-    step_buffer = np.zeros(len(route_wth_depot))
-    cur_time = earliest_start[depot] + service_time[depot]
-    min_buffer = np.zeros(len(route_wth_depot))
-    
-    for i, r in enumerate(route_wth_depot):
-        # print(route, [(earliest_start[r], service_time[r], latest_end[r]) for r in route])
-        assert cur_time <= latest_end[r], f"wrong route {route}, {[(earliest_start[r], service_time[r], latest_end[r]) for r in route]}"
-        # if cur_time > latest_end[r]: return min_buffer
-        step_buffer[i] = latest_end[r]-cur_time
-        cur_time = max(cur_time, earliest_start[r]) + service_time[r]
-    for i in range(len(route_wth_depot)-1, -1, -1):
-        if i == len(route_wth_depot)-1: min_buffer[i] = step_buffer[i]
-        else: min_buffer[i] = min(min_buffer[i+1], step_buffer[i])
-    return min_buffer
 
-def route_insertion_cost(route, customer, service_time, 
-                         earliest_start, latest_end,
-                         distance_matrix):
+def route_insertion_cost(route, customer, instance):
     route_len = len(route)
     min_cost = float("inf")
     min_pos = None
+    if not isinstance(customer, list): customer = [customer]
+    if instance["demands"][route+customer].sum() > instance["capacity"]: return min_cost, min_pos
+    earliest_start = instance["time_windows"][:, 0]
+    latest_end = instance["time_windows"][:, 1]
+    service_time = instance["service_times"]
+    distance_matrix = instance["duration_matrix"]
     cur_time = earliest_start[depot] + service_time[depot]
-    alpha = 1.0
     prev_node = depot
-    # min_buffer = get_time_buffer_on_route(route, service_time, earliest_start, latest_end)
     for i in range(route_len+1):
-        new_partial_route = [customer] + route[i:]
-        if cur_time + distance_matrix[prev_node][customer] > latest_end[customer]: break
-        if time_window_check_partial_route(new_partial_route, cur_time+distance_matrix[prev_node][customer], service_time, distance_matrix, earliest_start, latest_end):
-            new_cur_time = max(cur_time+distance_matrix[prev_node][customer], earliest_start[customer]) + service_time[customer]
-            time_increase = new_cur_time - cur_time
+        new_partial_route = customer + route[i:]
+        # if cur_time + distance_matrix[prev_node][customer[0]] > latest_end[customer[0]]: break
+        if time_window_check_partial_route(new_partial_route, cur_time+distance_matrix[prev_node][customer[0]], service_time, distance_matrix, earliest_start, latest_end):
             if i == 0:
                 old_cost = distance_matrix[depot][route[0]]
-                new_cost = distance_matrix[depot][customer] + distance_matrix[customer][route[0]]
+                new_cost = distance_matrix[depot][customer[0]] + distance_matrix[customer[-1]][route[0]]
             elif i == route_len:
                 old_cost = distance_matrix[route[-1]][depot]
-                new_cost = distance_matrix[customer][depot] + distance_matrix[route[-1]][customer]
+                new_cost = distance_matrix[route[-1]][customer[0]] + distance_matrix[customer[-1]][depot]
             else:
                 old_cost = distance_matrix[route[i-1]][route[i]]
-                new_cost = distance_matrix[route[i-1]][customer] + distance_matrix[customer][route[i]]
-            cur_cost = alpha*(new_cost-old_cost) + (1-alpha)*time_increase
+                new_cost = distance_matrix[route[i-1]][customer[0]] + distance_matrix[customer[-1]][route[i]]
+            cur_cost = new_cost-old_cost
             if cur_cost < min_cost: 
                 min_cost = cur_cost
                 min_pos = i
@@ -231,26 +221,41 @@ def compute_route_cost(routes, distance_matrix):
     return total_cost
 
 
-def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity, demands, service_time, 
-                                          earliest_start, latest_end,
-                                          distance_matrix):
-    ori_total_cost = compute_route_cost(cur_routes, distance_matrix)
+def best_insertion_cost(cur_solution, customers, instance):
+    routes_before_insert = []
+    for route in cur_solution:
+        new_route = [c for c in route if c not in customers]
+        if len(new_route) > 0: routes_before_insert.append(new_route)
+    for c in customers:
+        route_cost_list = sorted([(i, route_insertion_cost(route, c, instance))
+                                  for i, route in enumerate(routes_before_insert)], key=lambda x: x[1][0])
+        route_idx, (min_cost, min_pos) = route_cost_list[0]
+        if min_pos is not None: routes_before_insert[route_idx] = routes_before_insert[route_idx][:min_pos] + [c] + routes_before_insert[route_idx][min_pos:]
+        else: return cur_solution
+    return routes_before_insert
+     
+
+def heuristic_improvement_with_candidates(cur_solution, customers, instance):
+    num_neighbor_routes = 2
+    # ori_total_cost = compute_route_cost(cur_routes, distance_matrix)
+    cur_routes = {}
+    for i, route in enumerate(cur_solution): cur_routes[f"PATH{i}"] = route
     routes_before_insert = {}
+    nodes_to_routes_dict = {}
     for route_name, route in cur_routes.items():
+        for c in customers: nodes_to_routes_dict[c] = route_name
         new_route = [c for c in route if c not in customers]
         if len(new_route) > 0: routes_before_insert[route_name] = new_route
     customer_to_route_dict = {}
     for c in customers:
-        route_cost_list = sorted([(route_name, route_insertion_cost(route, c, service_time, 
-                                  earliest_start, latest_end,
-                                  distance_matrix))
+        route_cost_list = sorted([(route_name, route_insertion_cost(route, c, instance))
                                   for route_name, route in routes_before_insert.items()], key=lambda x: x[1][0])
-        customer_to_route_dict[c] = [x for x in route_cost_list[:min(2, len(route_cost_list))] if (x[1][1] is not None)]
+        customer_to_route_dict[c] = [x for x in route_cost_list[:min(num_neighbor_routes, len(route_cost_list))] if (x[1][1] is not None)]
     
     min_total_cost_increase = float("inf")
     new_routes_after_insertion = None
-    for i in range(2**(len(customers))):
-        idx_list = [(i//(2**j))%2 for j in range(len(customers))]
+    for i in range(num_neighbor_routes**(len(customers))):
+        idx_list = [(i//(num_neighbor_routes**j))%num_neighbor_routes for j in range(len(customers))]
         if np.any([idx+1>len(customer_to_route_dict[c]) for idx, c in zip(idx_list, customers)]): continue
         customer_on_route = {}
         for idx, c in zip(idx_list, customers):
@@ -265,12 +270,7 @@ def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity,
             if not valid_insertion: break
             new_route = routes_before_insert[route_name][:]
             for c in customers_to_insert:
-                if np.sum([demands[_c] for _c in new_route]) + demands[c] > truck_capacity: 
-                    valid_insertion = False
-                    break
-                min_cost, min_pos = route_insertion_cost(new_route, c, service_time, 
-                                                         earliest_start, latest_end,
-                                                         distance_matrix)
+                min_cost, min_pos = route_insertion_cost(new_route, c, instance)
                 if min_pos is None:
                     valid_insertion = False
                     break
@@ -282,18 +282,14 @@ def heuristic_improvement_with_candidates(cur_routes, customers, truck_capacity,
         if valid_insertion and total_cost_increase < min_total_cost_increase:
             min_total_cost_increase = total_cost_increase
             new_routes_after_insertion = {route_name: route[:] for route_name, route in routes_after_insertion.items()}
-    final_routes = cur_routes
-    cost_reduction = None
+    final_solution = cur_solution
     if not math.isinf(min_total_cost_increase):
         new_routes = {}
         for route_name, route in routes_before_insert.items():
             if route_name in new_routes_after_insertion: new_routes[route_name] = new_routes_after_insertion[route_name]
             else: new_routes[route_name] = route
-        new_route_cost = compute_route_cost(new_routes, distance_matrix)
-        if new_route_cost < ori_total_cost:
-            final_routes = new_routes
-        cost_reduction = ori_total_cost - new_route_cost
-    return final_routes, ori_total_cost, cost_reduction
+        final_solution = [route for route in new_routes.values()]
+    return final_solution
 
 if torch.cuda.is_available(): device = "cuda:0"
 else: device = "cpu"
@@ -406,12 +402,252 @@ def get_route_mask(route_nums):
     route_num_mask = torch.from_numpy(route_num_mask).to(device)
     route_len_mask = torch.from_numpy(route_len_mask).to(device)
     return route_num_mask, route_len_mask
+
+def fragment_reconstruction(route, instance):
+    tsp_route = get_tsp_solution(route, instance)
+    assert len(tsp_route) == len(route), f"wrong route len: {tsp_route}, {route}"
+    new_route = [tsp_route[0]]
+    for c in tsp_route[1:]:
+        _cost, _pos = route_insertion_cost(new_route, c, instance)
+        if _pos is None: return route
+        new_route = new_route[:_pos] + [c] + new_route[_pos:]
+    original_cost = tools.compute_route_driving_time(route, instance["duration_matrix"])
+    new_cost = tools.compute_route_driving_time(new_route, instance["duration_matrix"])
+    return route if new_cost-original_cost >=0 else new_route
+
+def reorder_nodes_according_solution(nodes, solution):
+    new_nodes = []
+    for route in solution:
+        for c in route:
+            if c in nodes: new_nodes.append(c)
+    return new_nodes
+
+def swap_improvement(solution, instance):
+    k1 = 2 #np.random.randint(1, 3)
+    k2 = 2 #np.random.randint(1, 3)
+    route_num = len(solution)
+    chosen_routes = np.random.choice(list(range(route_num)), size=2, replace=False)
+    route_idx1, route_idx2 = chosen_routes[0], chosen_routes[1]
+    route1, route2 = solution[route_idx1], solution[route_idx2]
+    len1, len2 = len(route1), len(route2)
+    node_idx1 = (np.random.randint(len1-k1) if len1 > k1 else 0)
+    node_idx2 = (np.random.randint(len2-k2) if len2 > k2 else 0)
+    _route1 = route1[:node_idx1] + route1[node_idx1+k1:]
+    _route2 = route2[:node_idx2] + route2[node_idx2+k2:]
+    c1, c2 = route1[node_idx1:node_idx1+k1], route2[node_idx2:node_idx2+k2]
+    if instance["demands"][_route1+c2].sum() > instance["capacity"] or instance["demands"][_route2+c1].sum() > instance["capacity"]: return solution, 0.0
+    ori_cost1, ori_cost2 = tools.compute_route_driving_time(route1, instance["duration_matrix"]), tools.compute_route_driving_time(route2, instance["duration_matrix"])
+    new_route1, reconstruced1 = get_tsptw_solution(_route1+c2, instance)
+    cost_reduction = 0.0
+    if reconstruced1:
+        new_route2, reconstruced2 = get_tsptw_solution(_route2+c1, instance)
+        if reconstruced2:
+            new_cost1, new_cost2 = tools.compute_route_driving_time(new_route1, instance["duration_matrix"]), tools.compute_route_driving_time(new_route2, instance["duration_matrix"])
+            cost_reduction = (ori_cost1 + ori_cost2) - (new_cost1 + new_cost2)
+            if cost_reduction > 0:
+                solution[route_idx1] = new_route1
+                solution[route_idx2] = new_route2
+    return solution, cost_reduction
+
+
+def ruin_and_recreation(node, solution, instance):
+    nb_customers = len(instance["demands"]) - 1
+    duration_matrix = instance["duration_matrix"]
+    num_nodes_ruin = 6 # nb_customers // np.random.randint(4, 8)
+    if np.random.random() <= 1.0:
+        dist_to_node = sorted([(c, duration_matrix[node][c]+duration_matrix[c][node]) for c in range(1, nb_customers+1)], key=lambda x: x[1])
+        ruin_nodes = [dist_to_node[i][0] for i in range(num_nodes_ruin)]
+    else:
+        ruin_nodes = np.random.choice(list(range(1,1+nb_customers)), size=num_nodes_ruin)
+    return heuristic_improvement_with_candidates(solution, ruin_nodes, instance)
+  
+
+def get_tsptw_problem(selected_customers, instance):
+    all_customers = [depot] + selected_customers
+    duration_matrix_str = ""
+    time_window_str = ""
+    for i, c in enumerate(all_customers):
+        duration_matrix_str += " ".join([str(instance["duration_matrix"][c][_c]+instance["service_times"][c]) for _c in all_customers])
+        duration_matrix_str += "\n"
+        time_window_str += f"{i+1} {instance['time_windows'][c, 0]} {instance['time_windows'][c, 1]}\n"
+    problem_str = f"""
+NAME : tsptw
+TYPE : TSPTW
+DIMENSION : {len(all_customers)}
+EDGE_WEIGHT_TYPE : EXPLICIT
+EDGE_WEIGHT_FORMAT : FULL_MATRIX
+EDGE_WEIGHT_SECTION
+{duration_matrix_str}
+TIME_WINDOW_SECTION
+{time_window_str}
+DEPOT_SECTION
+1 
+-1
+EOF
+"""
+    return problem_str
     
+
+def get_tsptw_solution(selected_customers, instance):
+    problem_str = get_tsptw_problem(selected_customers, instance)
+    problem = lkh.LKHProblem.parse(problem_str)
+    solver_path = '/home/lesong/euro-neurips-vrp/LKH-3.0.7/LKH'
+    route = lkh.solve(solver_path, problem=problem, max_trials=100, runs=1)
+    if len(route) <= 0: return selected_customers, False
+    else:
+        new_route = [selected_customers[c-2] for c in route[0][1:]]
+        return new_route, True
+
+
+def get_tsp_solution(selected_customers, instance):
+    nb_customers = len(selected_customers)
+    M = np.zeros((nb_customers+1, nb_customers+1))
+    for i, c1 in enumerate([depot] + selected_customers):
+        for j, c2 in enumerate([depot] + selected_customers):
+            M[i, j] = instance["duration_matrix"][c1][c2]
+    route = elkai.solve_float_matrix(M)[1:]
+    return [selected_customers[c-1] for c in route]
+
+
+def solve_single_route(selected_customers,
+                       instance,
+                       lp_file_name = None,
+                       bigm=10000000,
+                       mip_gap=0.001,
+                       solver_time_limit_minutes=1,
+                       enable_solution_messaging=1,
+                       solver_type='PULP_CBC_CMD'):
+    _depot = "Customer_0"
+    selected_customers = [0] + selected_customers
+    num_customers = len(selected_customers)
+    local_customers_var = [f"Customer_{i}" for i in range(num_customers)]
+    local_transit_cost = np.zeros((num_customers, num_customers))
+    for i, c1 in enumerate(selected_customers):
+        for j, c2 in enumerate(selected_customers):
+            local_transit_cost[i, j] = instance["duration_matrix"][c1, c2]
+            
+    local_assignment_var_dict = {}
+    local_transit_cost_dict = {}
+    for i in range(num_customers):
+        for j in range(num_customers):
+            local_assignment_var_dict[f"Customer_{i}", f"Customer_{j}"] = 0
+            local_transit_cost_dict[f"Customer_{i}", f"Customer_{j}"] = local_transit_cost[i, j]
+
+    # local_service_time = {}
+    # local_demands = {}
+    # local_earliest_start = {}
+    # local_latest_end = {}
+    # earliest_start = instance["time_windows"][:, 0]
+    # latest_end = instance["time_windows"][:, 1]
+    # service_time = instance["service_times"]
+    # truck_capacity = instance["capacity"]
+    # for i in range(num_customers):
+    #     key = local_customers_var[i]
+    #     local_demands[key] = instance["demands"][selected_customers[i]]
+    #     local_earliest_start[key] = earliest_start[selected_customers[i]]
+    #     local_latest_end[key] = latest_end[selected_customers[i]]
+    #     local_service_time[key] = service_time[selected_customers[i]]
+
+    # sub problem
+    sub_model = LpProblem("SU_CVRPTW", LpMinimize)
+    # time_var = LpVariable.dicts("Time", local_customers_var, 0, None, LpContinuous)
+    assignment_var = LpVariable.dicts("Assign", local_assignment_var_dict.keys(), 0, 1, LpBinary) #LpBinary
+
+    print('objective function')
+    max_transportation_cost = np.max(list(local_transit_cost_dict.values()))
+    
+    sub_model += lpSum(
+        (local_transit_cost_dict[from_loc, to_loc]-max_transportation_cost) * assignment_var[from_loc, to_loc]
+        for from_loc, to_loc in local_assignment_var_dict.keys())
+
+    # Each vehicle should leave from a depot
+    print('Each vehicle should leave from a depot')
+    sub_model += lpSum([assignment_var[_depot, customer]
+                                for customer in local_customers_var]) == 1, "entryDepotConnection"
+
+    # Flow in Flow Out
+    print('Flow in Flow out')
+    for customer in local_customers_var:
+        sub_model += (assignment_var[customer, customer] == 0.0, f"no loop for {customer}")
+        sub_model += lpSum([assignment_var[customer, _customer]
+                            for _customer in local_customers_var]) == 1, f"must leave {customer}"
+        sub_model += lpSum([assignment_var[_customer, customer]
+                            for _customer in local_customers_var]) == 1, f"must enter {customer}"
+        # sub_model += lpSum(
+        #     [assignment_var[from_loc, customer] for from_loc in local_customers_var]) - lpSum(
+        #     [assignment_var[customer, to_loc] for to_loc in local_customers_var]) == 0, "forTrip" + str(
+        #     customer)
+
+    # Each vehicle should enter a depot
+    # print('Each vehicle should enter a depot')
+    # sub_model += lpSum([assignment_var[customer, _depot]
+    #                         for customer in local_customers_var]) == 1, "exitDepotConnection"
+
+    # # vehicle Capacity
+    # print('vehicle Capacity')
+    # sub_model += lpSum(
+    #     [float(local_demands[from_loc]) * assignment_var[from_loc, to_loc]
+    #         for from_loc, to_loc in local_assignment_var_dict.keys()]) <= float(truck_capacity), "Capacity"
+
+    # # Time intervals
+    # print('time intervals')
+    # for from_loc, to_loc in local_assignment_var_dict.keys():
+    #     if to_loc == _depot: continue
+    #     stop_time = local_service_time[from_loc]
+    #     sub_model += time_var[to_loc] - time_var[from_loc] >= \
+    #                     stop_time + bigm * assignment_var[
+    #                         from_loc, to_loc] - bigm, "timewindow" + str(
+    #         from_loc) + 'p' + str(to_loc)
+
+    # # Time Windows
+    # print('time windows')
+    # for vertex in local_customers_var:
+    #     time_var[vertex].bounds(float(local_earliest_start[vertex]),
+    #                             float(local_latest_end[vertex]))
+
+    if lp_file_name is not None:
+        sub_model.writeLP('{}.lp'.format(str(lp_file_name)))
+
+    print("Using solver ", solver_type)
+    if solver_type == 'PULP_CBC_CMD':
+        sub_model.solve(PULP_CBC_CMD(
+            msg=enable_solution_messaging,
+            timeLimit=60 * solver_time_limit_minutes,
+            fracGap=mip_gap)
+        )
+    elif solver_type == "GUROBI_CMD":
+        solver = getSolver('GUROBI_CMD', msg=enable_solution_messaging,
+            timeLimit=60 * solver_time_limit_minutes)
+        sub_model.solve(solver)
+
+    if LpStatus[sub_model.status] in ('Optimal', 'Undefined'):
+        print('Sub Model Status = {}'.format(LpStatus[sub_model.status]))
+        print("Sub model optimized objective function= ", value(sub_model.objective))
+        solution_objective = value(sub_model.objective)
+        # get assignment variable values
+        #print('getting solution for assignment variables')
+        route_dict = {}
+        for from_loc, to_loc in local_assignment_var_dict.keys():
+            if assignment_var[from_loc, to_loc].value() > 0:
+                route_dict[int(from_loc.split("_")[1])] = int(to_loc.split("_")[1])
+        print(route_dict)
+        route = []
+        cur_node = depot
+        while True:
+            if cur_node in route_dict: cur_node = route_dict[cur_node]
+            else: break
+            if cur_node == depot:
+                break
+            route.append(cur_node)
+        return route
+    else:
+        print('Model Status = {}'.format(LpStatus[sub_model.status]))
+        raise Exception('No Solution Exists for the Sub problem')
+
 
 def extend_candidate_points(route, node_idx, distance_matrix, all_customers):
     if len(route) <= 2: 
         M = route[:]
-        # if len(M) <= 1: M.append(depot)
         prev_node = next_node = depot
     else:
         M = route[node_idx:node_idx+2]
@@ -421,6 +657,7 @@ def extend_candidate_points(route, node_idx, distance_matrix, all_customers):
     dist = sorted(dist, key=lambda x: x[1])
     M.extend([dist[i][0] for i in range(min(4, len(dist)))])
     return M
+
 
 def select_candidate_points(routes, distance_matrix, all_customers, only_short_routes=False):
     if only_short_routes:

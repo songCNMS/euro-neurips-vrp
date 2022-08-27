@@ -16,6 +16,7 @@ if __name__ == "__main__":
     parser.add_argument("--instance_seed", type=int, default=1, help="Seed to use for the dynamic instance")
     parser.add_argument("--static", action='store_true', help="Add this flag to solve the static variant of the problem (by default dynamic)")
     parser.add_argument("--epoch_tlim", type=int, default=120, help="Time limit per epoch")
+    parser.add_argument("--inc_tlim", type=int, default=0, help="Time limit per epoch")
     parser.add_argument("--timeout", type=int, default=3600, help="Global timeout (seconds) to use")
 
     try:
@@ -31,7 +32,7 @@ if __name__ == "__main__":
     static_instance = tools.read_vrplib(args.instance)
 
     # Create environment
-    env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim, args.static)
+    env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim+args.inc_tlim, args.static)
 
     done = False
 

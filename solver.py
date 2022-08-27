@@ -6,11 +6,13 @@ import os
 import uuid
 import platform
 import numpy as np
+import time
 
 import tools
 from environment import VRPEnvironment, ControllerEnvironment
 from baselines.strategies import STRATEGIES
-from cvrptw_utility import extend_candidate_points, heuristic_improvement_with_candidates, get_problem_dict
+from cvrptw_utility import extend_candidate_points, heuristic_improvement_with_candidates, \
+                            ruin_and_recreation, fragment_reconstruction, swap_improvement, best_insertion_cost, get_tsptw_solution
 
 
 # self.epoch_instance = {
@@ -54,43 +56,48 @@ def get_instance_dict(instance):
 
 def hybrid_solve_static_vrptw(instance, time_limit=360, tmp_dir="tmp", seed=1, verbose=False):
     rng = np.random.default_rng(seed)
-    solutions = list(solve_static_vrptw(instance, time_limit=time_limit, seed=seed, tmp_dir=tmp_dir))
+    ges_tlim = time_limit*2 // 3
+    solutions = list(solve_static_vrptw(instance, time_limit=ges_tlim, seed=seed, tmp_dir=tmp_dir))
     # assert len(solutions) >= 1, "failed to init"
-    init_routes, total_cost = solutions[-1]
-    cur_routes = {}
-    for i, route in enumerate(init_routes):
-        path_name = f"PATH{i}"
-        cur_routes[path_name] = [f"Customer_{c}" for c in route]
-    all_customers, demands_dict, service_time_dict, \
-        earliest_start_dict, latest_end_dict, distance_matrix_dict \
-            = get_instance_dict(instance)
-    truck_capacity = instance["capacity"]
-    num_episodes = 20000
-    early_stop_rounds = 200
-    cost_reduction_list = []
-    if verbose: log(f"init cost: {total_cost}", newline=True, flush=True)
-    for i in range(num_episodes):
-        route_name_list = list(cur_routes.keys())
-        route_idx = rng.integers(len(route_name_list))
-        route = cur_routes[route_name_list[route_idx]]
-        node_idx = rng.integers(len(route))
-        M = extend_candidate_points(route, node_idx, distance_matrix_dict, all_customers)
-        cur_routes, _, cost_reduction =\
-                heuristic_improvement_with_candidates(cur_routes, M, truck_capacity, 
-                                                    demands_dict, service_time_dict, 
-                                                    earliest_start_dict, latest_end_dict,
-                                                    distance_matrix_dict)
-        if verbose: log(f"{i} improvement: {cost_reduction}, route: {route_name_list[route_idx]}, node_idx: {node_idx}", newline=True, flush=True)
-        cost_reduction_list.append(max(0.0, (0.0 if cost_reduction is None else cost_reduction)))
-        if len(cost_reduction_list) > early_stop_rounds and np.max(cost_reduction_list[-early_stop_rounds]) <= 0.0: break
-    solution = []
-    for _, route in cur_routes.items(): solution.append(np.array([int(c.split('_')[-1]) for c in route]))
-    cost = tools.validate_static_solution(instance, solution)
-    yield solution, cost
+    solution, total_cost = solutions[-1]
+    i = 0
+    start_time = time.time()
+    inc_limit = max(time_limit-ges_tlim, 0)
+    # cur_total_cost = total_cost
+    nb_customers = len(instance['demands'])-1
+    all_customers = list(range(1, 1+nb_customers))
+    new_solution = []
+    for route in solution:
+        new_route, _ = get_tsptw_solution(route, instance)
+        new_solution.append(new_route)
+    cur_total_cost = total_cost_after_decomp = tools.compute_solution_driving_time(instance, new_solution)
+    while inc_limit > 2:
+    #     i += 1
+    #     new_solution, cost_reduction = swap_improvement(new_solution, instance)
+    #     # node = rng.integers(1, 1+nb_customers)
+    #     # _solution = ruin_and_recreation(node, new_solution, instance)
+        route_idx = rng.integers(len(new_solution))
+        if len(new_solution[route_idx]) > 2: node_idx = rng.integers(len(new_solution[route_idx])-1)
+        else: node_idx = 0
+        M = extend_candidate_points(new_solution[route_idx], node_idx, instance["duration_matrix"], all_customers)
+        _solution = heuristic_improvement_with_candidates(new_solution, M, instance)
+        new_cost = tools.compute_solution_driving_time(instance, _solution)
+        cost_reduction = cur_total_cost-new_cost
+        if cost_reduction > 0.0:
+            new_solution = _solution
+            cur_total_cost = new_cost
+        if verbose: log(f"{i} improvement: {cost_reduction}", newline=True, flush=True)
+        inc_limit = time_limit-ges_tlim-(time.time() - start_time)
+    if verbose: 
+        log(f"init cost: {total_cost}, after decompose: {total_cost_after_decomp}", newline=True, flush=True)
+        log(f"ori solution: {solution}", newline=True, flush=True)
+        log(f"new solution: {new_solution}", newline=True, flush=True)
+    cost = tools.validate_static_solution(instance, new_solution)
+    yield new_solution, cost
     return
 
-def solve_static_vrptw(instance, time_limit=3600, tmp_dir="tmp", seed=1):
 
+def solve_static_vrptw(instance, time_limit=3600, tmp_dir="tmp", seed=1):
     # Prevent passing empty instances to the static solver, e.g. when
     # strategy decides to not dispatch any requests for the current epoch
     if instance['coords'].shape[0] <= 1:

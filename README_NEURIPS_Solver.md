@@ -40,6 +40,7 @@ To solve the static variant of a problem instance, add `--static`:
 ```shell
 python controller.py --instance instances/ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt --epoch_tlim 5 --static -- python solver.py --verbose
 ```
+python solver.py --instance cvrp_benchmarks/homberger_ortec_customer_instances/ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt --epoch_tlim 60 --static --verbose --solver rl
 
 # Baseline solver: Hybrid Genetic Search (HGS)
 

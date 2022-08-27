@@ -129,6 +129,26 @@ def validate_route_time_windows(route, dist, timew, service_t, release_t=None):
     current_time += dist[prev_stop, depot]
     assert current_time <= latest_arrival_depot, f"Time window violated for depot: {current_time} not in ({earliest_start_depot}, {latest_arrival_depot})"
 
+def check_route_time_windows(route, dist, timew, service_t, release_t=None):
+    depot = 0  # For readability, define variable
+    earliest_start_depot, latest_arrival_depot = timew[depot]
+    if release_t is not None:
+        earliest_start_depot = max(earliest_start_depot, release_t[route].max())
+    current_time = earliest_start_depot + service_t[depot]
+    prev_stop = depot
+    for stop in route:
+        earliest_arrival, latest_arrival = timew[stop]
+        arrival_time = current_time + dist[prev_stop, stop]
+        # Wait if we arrive before earliest_arrival
+        current_time = max(arrival_time, earliest_arrival)
+        if current_time > latest_arrival: return False
+        current_time += service_t[stop]
+        prev_stop = stop
+    current_time += dist[prev_stop, depot]
+    return current_time <= latest_arrival_depot
+
+
+
 
 def readlines(filename):
     try:
