@@ -615,16 +615,16 @@ def optimize_vrptw(selected_customers,
     customers = list(range(1, len(selected_customers)+1))
     all_customers = [depot] + customers
     all_vehicles = list(range(num_vehicles))
-    x = [LpVariable(f'X_{i}_{j}_{k}', lowBound=0, upBound=1, cat='Integer')
-         for i in all_customers for j in all_customers for k in all_vehicles]
+    x = [[[LpVariable(f'X_{i}_{j}_{k}', lowBound=0, upBound=1, cat='Integer')
+         for k in all_vehicles] for j in all_customers] for i in all_customers]
     T = [LpVariable(f'T_{i}', lowBound=0, cat='Continuous') for i in all_customers]
     U = [LpVariable(f'U_{i}', lowBound=0, cat='Integer') for i in all_customers]
     
     capacity = instance["capacity"]
     duration_matrix = np.zeros((len(all_customers), len(all_customers)))
-    service_times = np.array(len(all_customers))
-    demands = np.array(len(all_customers))  
-    time_windows = np.array((len(all_customers), 2))   
+    service_times = np.zeros(len(all_customers))
+    demands = np.zeros(len(all_customers))  
+    time_windows = np.zeros((len(all_customers), 2))   
     for i in range(len(all_customers)):
         service_times[i] = instance["service_times"][all_customers[i]]
         demands[i] = instance["demands"][all_customers[i]]
@@ -632,33 +632,33 @@ def optimize_vrptw(selected_customers,
         for j in range(len(all_customers)): duration_matrix[i, j] = instance["duration_matrix"][all_customers[i], all_customers[j]]
 
     prob = LpProblem("SU_CVRPTW", LpMinimize)
-    prob += lpSum(x[i, j, k]*duration_matrix[i, j] for i in all_customers for j in all_customers for k in all_vehicles)
+    prob += lpSum(x[i][j][k]*duration_matrix[i, j] for i in all_customers for j in all_customers for k in all_vehicles)
 
     # visit exactly once
-    for j in customers: prob += lpSum(x[i,j,k] for i in all_customers for k in all_vehicles) == 1
+    for j in customers: prob += lpSum(x[i][j][k] for i in all_customers for k in all_vehicles) == 1
     
     # flow conservation: flow in and out should be the same
     for s in customers:
-        for k in all_vehicles: prob += lpSum(x[i,s,k] for i in all_customers) == lpSum(x[s,j,k] for j in all_customers)
+        for k in all_vehicles: prob += lpSum(x[i][s][k] for i in all_customers) == lpSum(x[s][j][k] for j in all_customers)
     
     # route start and end 
     for s in [depot]:
-        for k in all_vehicles: prob += lpSum(x[s,i,k] for i in customers) == lpSum(x[j,s,k] for j in customers)
+        for k in all_vehicles: prob += lpSum(x[s][i][k] for i in customers) == lpSum(x[j][s][k] for j in customers)
     
     # capacity constraint
     for k in all_vehicles:
-        prob += lpSum(demands[i]*x[i, j, k] for i in all_customers for j in all_customers) <= capacity
+        prob += lpSum(demands[i]*x[i][j][k] for i in all_customers for j in all_customers) <= capacity
     
     # in prescribed time window
     for k in all_vehicles:
         for i in customers:
             for j in customers:
-                prob += (T[i]-T[j] >= service_times[j]+duration_matrix[j, i]+bigm*x[i,j,k]-bigm)
+                prob += (T[i]-T[j] >= service_times[j]+duration_matrix[j, i]+bigm*x[i][j][k]-bigm)
         T[i].bounds(time_windows[i][0], time_windows[i][1])
 
     # sub-tour elimination
     for i in customers:
-        for j in customers: prob += U[j] >= U[i] + 1 - len(all_customers)*(1-lpSum(x[i,j,k] for k in all_vehicles))
+        for j in customers: prob += U[j] >= U[i] + 1 - len(all_customers)*(1-lpSum(x[i][j][k] for k in all_vehicles))
 
     print("Using solver ", solver_type)
     if solver_type == 'PULP_CBC_CMD':
