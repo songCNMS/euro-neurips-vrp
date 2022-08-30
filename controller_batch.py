@@ -10,7 +10,6 @@ from environment import VRPEnvironment
 import os
 from datetime import datetime
 import pandas as pd
-from cvrptw_utility import compute_cost_from_routes
 
 
 
@@ -23,6 +22,8 @@ if __name__ == "__main__":
     parser.add_argument("--epoch_tlim", type=int, default=600, help="Time limit per epoch")
     parser.add_argument("--timeout", type=int, default=3600, help="Global timeout (seconds) to use")
     parser.add_argument("--remote", action="store_true")
+    parser.add_argument("--solver", type=str)
+    parser.add_argument("--strategy", type=str)
     
     try:
         split_idx = sys.argv.index("--")
@@ -43,36 +44,31 @@ if __name__ == "__main__":
     
     dir_name = os.path.dirname(f"{data_dir}/cvrp_benchmarks/homberger_{args.instance}_customer_instances/")
     problem_list = sorted(os.listdir(dir_name))
-    res_file_name = f"{output_dir}/ges_res_{args.instance}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-    sota_res = pd.read_csv("hybrid_res/sota_res.csv")
-    sota_res_dict = {row["problem"]: (row["distance"], row["vehicle"]) for _, row in sota_res.iterrows()}
     result_list = []
     for problem in problem_list:
         problem_file = os.path.join(dir_name, problem)
         print(problem_file)
         if is_solo: static_instance = tools.read_solomon(problem_file)
         else: static_instance = tools.read_vrplib(problem_file)
-
+        num_customers = len(static_instance["demands"])
+        epoch_tlim = 60
+        if args.static: epoch_tlim = (5*60 if num_customers <= 300 else (10*60 if num_customers <= 500 else 15*60))
         # Create environment
-        env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim, args.static)
-
+        env = VRPEnvironment(args.instance_seed, static_instance, epoch_tlim, args.static)
         done = False
 
         # Start subprocess and interact with it
         with subprocess.Popen(solver_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) as p:
-
             # Set global timeout, bit ugly but this will also interrupt waiting for input
             timeout_timer = threading.Timer(args.timeout, lambda: p.kill())
             timeout_timer.daemon = True
             timeout_timer.start()
-
             for line in p.stdout:
                 line = line.strip()
                 request = json.loads(line)
                 if request['action'] == 'step':
                     solution = [np.array(route) for route in request['data']]
                     observation, reward, done, info = env.step(solution)
-
                     response = dict(
                         observation=observation,
                         reward=reward,
@@ -88,7 +84,6 @@ if __name__ == "__main__":
                     )
                 else:
                     raise Exception("Invalid request")
-                
                 response_str = tools.json_dumps_np(response)
                 p.stdin.write(response_str)
                 p.stdin.write('\n')
@@ -109,15 +104,11 @@ if __name__ == "__main__":
             print(f"Cost of solution: {sum(env.final_costs.values())}")
             print("Solution:")
             print(tools.json_dumps_np(env.final_solutions))
-            if is_solo:
-                route_num = len(env.final_solutions[env.end_epoch])
-                total_cost = compute_cost_from_routes(env.final_solutions[env.end_epoch], static_instance['coords'])
-            else: route_num, total_cost = len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values())
+            route_num, total_cost = len(env.final_solutions[env.end_epoch]), sum(env.final_costs.values())
         else: route_num, total_cost = -1, -1
         problem_name =  str.lower(os.path.splitext(os.path.basename(problem_file))[0])
-        sota = sota_res_dict.get(problem_name, (1, 1))
-        result_list.append([problem, route_num, total_cost, sota[1], sota[0]])
-        res_df = pd.DataFrame(data=result_list, columns=['problem', 'vehicles', 'total_cost', 'sota_vehicles', 'sota_cost'])
-        res_df.loc[:, "gap"] = (res_df["total_cost"] - res_df["sota_cost"])/res_df["sota_cost"]
-        res_df.to_csv(res_file_name, index=False)
+        result_list.append([problem, route_num, total_cost])
+        res_df = pd.DataFrame(data=result_list, columns=['problem', 'vehicles', f'{args.solver}_total_cost'])
+        is_static = ("static" if args.static else "dynamic")
+        res_df.to_csv(f"{args.solver}_{args.instance}_{is_static}_{args.strategy}.csv", index=False)
     print(res_df.head())

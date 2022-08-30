@@ -9,13 +9,18 @@ target:
   # vc: gcr-singularity-resrch
 
 environment:
-  image: lesongdocker:vrp
+  image: lesongdocker:env38
   registry: resrchvc4cr.azurecr.io # any public registry can be specified here
   username: resrchvc4cr
   setup:
     - apt install libffi-dev
     - pip install pulp
+    - pip install gym
+    - pip install pyyaml
     - pip install elkai
+    - pip install wandb
+    - pip install nn_builder==0.0.12
+    - pip install scikit-network
     - cd baselines/hgs_vrptw; make all; cd ../..
 
 code:
@@ -29,27 +34,17 @@ data:
 
 # list of jobs to run, we run 2 jobs in this example
 jobs:
-# - name: vrptw_ortec
-#   sku: C32
-#   command:
-#   - python controller_batch.py --instance ortec --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-# - name: vrptw_200
-#   sku: C32
-#   command:
-#   - python controller_batch.py --instance 200 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-- name: vrptw_400
-  sku: C1
+- name: vrptw_ortec_rl
+  sku: C8
   command:
-  - python controller_batch.py --instance 400 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-# - name: vrptw_600
-#   sku: C32
-#   command:
-#   - python controller_batch.py --instance 600 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-# - name: vrptw_800
-#   sku: C32
-#   command:
-#   - python controller_batch.py --instance 800 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
-# - name: vrptw_1000
-#   sku: C32
-#   command:
-#   - python controller_batch.py --instance 1000 --static --epoch_tlim 1200 --remote --  python solver.py --verbose
+  - python controller_batch.py --instance ortec --static --solver rl --  python solver.py --verbose --solver rl
+  - python controller_batch.py --instance ortec --solver rl --  python solver.py --verbose --solver rl --strategy greedy
+- name: vrptw_ortec_baseline
+  sku: C8
+  command:
+  - python controller_batch.py --instance ortec --static --solver baseline --  python solver.py --verbose --solver baseline
+  - python controller_batch.py --instance ortec --solver baseline --  python solver.py --verbose --solver baseline
+  - python controller_batch.py --instance ortec --solver baseline --epoch_tlim 60 --strategy greedy --  python solver.py --verbose --solver baseline --strategy greedy
+  - python controller_batch.py --instance ortec --solver baseline --epoch_tlim 60 --strategy random --  python solver.py --verbose --solver baseline --strategy random
+  - python controller_batch.py --instance ortec --solver baseline --epoch_tlim 60 --strategy lazy --  python solver.py --verbose --solver baseline --strategy lazy
+  - python controller_batch.py --instance ortec --solver baseline --epoch_tlim 60 --strategy heuristic --  python solver.py --verbose --solver baseline --strategy heuristic

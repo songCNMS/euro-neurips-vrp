@@ -12,7 +12,9 @@ import tools
 from environment import VRPEnvironment, ControllerEnvironment
 from baselines.strategies import STRATEGIES
 from cvrptw_utility import extend_candidate_points, heuristic_improvement_with_candidates, \
-                            ruin_and_recreation, fragment_reconstruction, swap_improvement, best_insertion_cost, get_tsptw_solution
+                            ruin_and_recreation, fragment_reconstruction, \
+                                swap_improvement, best_insertion_cost, get_tsptw_solution, \
+                                    heuristic_improvement_tsptw, reconstruct_routes
 
 
 # self.epoch_instance = {
@@ -56,7 +58,7 @@ def get_instance_dict(instance):
 
 def hybrid_solve_static_vrptw(instance, time_limit=360, tmp_dir="tmp", seed=1, verbose=False):
     rng = np.random.default_rng(seed)
-    ges_tlim = time_limit*2 // 3
+    ges_tlim = 30 # (time_limit * 2) // 3
     solutions = list(solve_static_vrptw(instance, time_limit=ges_tlim, seed=seed, tmp_dir=tmp_dir))
     # assert len(solutions) >= 1, "failed to init"
     solution, total_cost = solutions[-1]
@@ -66,21 +68,19 @@ def hybrid_solve_static_vrptw(instance, time_limit=360, tmp_dir="tmp", seed=1, v
     # cur_total_cost = total_cost
     nb_customers = len(instance['demands'])-1
     all_customers = list(range(1, 1+nb_customers))
-    new_solution = []
-    for route in solution:
-        new_route, _ = get_tsptw_solution(route, instance)
-        new_solution.append(new_route)
-    cur_total_cost = total_cost_after_decomp = tools.compute_solution_driving_time(instance, new_solution)
-    while inc_limit > 2:
-    #     i += 1
-    #     new_solution, cost_reduction = swap_improvement(new_solution, instance)
-    #     # node = rng.integers(1, 1+nb_customers)
-    #     # _solution = ruin_and_recreation(node, new_solution, instance)
-        route_idx = rng.integers(len(new_solution))
-        if len(new_solution[route_idx]) > 2: node_idx = rng.integers(len(new_solution[route_idx])-1)
-        else: node_idx = 0
-        M = extend_candidate_points(new_solution[route_idx], node_idx, instance["duration_matrix"], all_customers)
-        _solution = heuristic_improvement_with_candidates(new_solution, M, instance)
+    new_solution = solution
+    cur_total_cost = tools.compute_solution_driving_time(instance, new_solution)
+    while inc_limit > 10:
+        i += 1
+        # new_solution, cost_reduction = swap_improvement(new_solution, instance)
+        # node = rng.integers(1, 1+nb_customers)
+        # _solution = ruin_and_recreation(node, new_solution, instance)
+        # route_idx = rng.integers(len(new_solution))
+        # if len(new_solution[route_idx]) > 2: node_idx = rng.integers(len(new_solution[route_idx])-1)
+        # else: node_idx = 0
+        # M = extend_candidate_points(route_idx, node_idx, instance, new_solution)
+        # _solution = heuristic_improvement_with_candidates(new_solution, M, instance)
+        _solution = reconstruct_routes(2, new_solution, instance)
         new_cost = tools.compute_solution_driving_time(instance, _solution)
         cost_reduction = cur_total_cost-new_cost
         if cost_reduction > 0.0:
@@ -88,11 +88,16 @@ def hybrid_solve_static_vrptw(instance, time_limit=360, tmp_dir="tmp", seed=1, v
             cur_total_cost = new_cost
         if verbose: log(f"{i} improvement: {cost_reduction}", newline=True, flush=True)
         inc_limit = time_limit-ges_tlim-(time.time() - start_time)
-    if verbose: 
-        log(f"init cost: {total_cost}, after decompose: {total_cost_after_decomp}", newline=True, flush=True)
-        log(f"ori solution: {solution}", newline=True, flush=True)
-        log(f"new solution: {new_solution}", newline=True, flush=True)
+    total_cost_after_improve = tools.compute_solution_driving_time(instance, new_solution)
+    if verbose:
+        log(f"init cost: {total_cost}, after improve: {total_cost_after_improve}", newline=True, flush=True)
+    for i, route in enumerate(new_solution):
+        inc_limit = time_limit-ges_tlim-(time.time() - start_time)
+        if inc_limit < 2: break
+        new_route, _ = get_tsptw_solution(route, instance)
+        new_solution[i] = new_route
     cost = tools.validate_static_solution(instance, new_solution)
+    if verbose: log(f"final cost: {cost}", newline=True, flush=True)
     yield new_solution, cost
     return
 

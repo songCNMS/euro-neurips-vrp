@@ -32,7 +32,7 @@ if __name__ == "__main__":
     static_instance = tools.read_vrplib(args.instance)
 
     # Create environment
-    env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim+args.inc_tlim, args.static)
+    env = VRPEnvironment(args.instance_seed, static_instance, args.epoch_tlim, args.static)
 
     done = False
 

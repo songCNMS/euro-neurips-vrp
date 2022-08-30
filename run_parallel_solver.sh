@@ -2,7 +2,7 @@
 strategy=$1  # [greedy, lazy, random]
 nw=$2  # parallelism degree
 
-instances=( $(ls -1 ./instances/*) )
+instances=( $(ls -1 ./cvrp_benchmarks/homberger_ortec_customer_instances/*) )
 num_instances=${#instances[@]}
 
 for i in $(seq 0 $nw $num_instances)
