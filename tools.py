@@ -123,6 +123,7 @@ def validate_route_time_windows(route, dist, timew, service_t, release_t=None):
         arrival_time = current_time + dist[prev_stop, stop]
         # Wait if we arrive before earliest_arrival
         current_time = max(arrival_time, earliest_arrival)
+        # print(stop, current_time, timew[stop])
         assert current_time <= latest_arrival, f"Time window violated for stop {stop}: {current_time} not in ({earliest_arrival}, {latest_arrival})"
         current_time += service_t[stop]
         prev_stop = stop

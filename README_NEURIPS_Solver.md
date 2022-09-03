@@ -43,7 +43,7 @@ python controller.py --instance instances/ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.
 
 python controller.py --instance cvrp_benchmarks/homberger_ortec_customer_instances/ORTEC-VRPTW-ASYM-ffa0f3b4-d1-n363-k22.txt --epoch_tlim 60 -- python solver.py --verbose
 
-python solver.py --instance cvrp_benchmarks/homberger_ortec_customer_instances/ORTEC-VRPTW-ASYM-ffa0f3b4-d1-n363-k22.txt --epoch_tlim 60 --verbose --solver 
+python solver.py --instance cvrp_benchmarks/homberger_ortec_customer_instances/ORTEC-VRPTW-ASYM-0bdff870-d1-n458-k35.txt --epoch_tlim 240 --static --verbose --solver rl
 
 # Baseline solver: Hybrid Genetic Search (HGS)
 

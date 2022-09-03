@@ -80,7 +80,7 @@ def hybrid_solve_static_vrptw(instance, time_limit=360, tmp_dir="tmp", seed=1, v
         # else: node_idx = 0
         # M = extend_candidate_points(route_idx, node_idx, instance, new_solution)
         # _solution = heuristic_improvement_with_candidates(new_solution, M, instance)
-        _solution = reconstruct_routes(2, new_solution, instance)
+        _solution = reconstruct_routes(2, new_solution, instance, solver_type='GUROBI_CMD')
         new_cost = tools.compute_solution_driving_time(instance, _solution)
         cost_reduction = cur_total_cost-new_cost
         if cost_reduction > 0.0:

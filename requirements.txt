@@ -7,3 +7,4 @@ scikit-network
 wandb
 nn_builder
 stable_baselines3
+lkh
