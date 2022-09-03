@@ -84,7 +84,7 @@ if __name__ == "__main__":
     config.save_model = False
     config.generate_trajectory_warmup_rounds = args.warmup
     config.debug_mode = False
-    config.linear_route = True
+    config.linear_route = False
     config.is_vec_env = True
     config.cost_reduction = False
     config.restore_checkpoint = None

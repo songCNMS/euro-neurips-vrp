@@ -56,7 +56,7 @@ def compute_route_cost(routes, problem, sub_problem):
 
 class SubVRPTW_Environment(gym.Env):
     environment_name = "VRPTW Environment"
-    num_nodes_to_sample = 16
+    num_nodes_to_sample = 12
 
     def __init__(self, instance, data_dir, save_data=False, seed=1):
         self.rng = np.random.default_rng(seed)
@@ -65,10 +65,9 @@ class SubVRPTW_Environment(gym.Env):
         self.rd_seed = seed
         self.save_data = save_data
         self.mode = 'train'
-        self.reset()
-        self.cur_step = 0
         self._max_episode_steps = max_num_nodes*4
         self.max_episode_steps = self._max_episode_steps
+        self.cur_step = 0
         self.trials = 10
         self.reward_threshold = float("inf")
         self.id = "SubVRPTW"
@@ -77,7 +76,8 @@ class SubVRPTW_Environment(gym.Env):
             low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
         self.action_space = spaces.Discrete(1+max_num_route)
-        
+        self.reset()
+
     def seed(self, s):
         self.rd_seed = s
         self.rng = np.random.default_rng(s)
@@ -105,26 +105,30 @@ class SubVRPTW_Environment(gym.Env):
         if routes is None:
             solution_file_name = f"{self.data_dir}/cvrp_benchmarks/RL_train_data/{self.problem_name}.npy"
             tmp_file_name =  f'tmp/{self.problem_name}'
-            if os.path.exists(solution_file_name): _routes = np.load(solution_file_name, allow_pickle=True)
+            if os.path.exists(solution_file_name): routes = np.load(solution_file_name, allow_pickle=True)
             else:
                 if os.path.exists(tmp_file_name):
                     os.rmdir(tmp_file_name)
                 os.makedirs(tmp_file_name, exist_ok=True)
-                _routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=tmp_file_name, time_limit=240)
-                np.save(solution_file_name, np.array(_routes))
+                routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=tmp_file_name, time_limit=240)
+                np.save(solution_file_name, np.array(routes))
         duration_matrix = self.problem["duration_matrix"]
-        route_idx = self.rng.integers(len(self.route_name_list))
-        node_idx = self.rng.integers(len(self.cur_routes[route_idx]))
-        node = self.cur_routes[route_idx][node_idx]
-        nb_customers = len(self.all_customers) - 1
-        dist_to_node = sorted([(c, duration_matrix[node][c]+duration_matrix[c][node]) for c in range(1, nb_customers+1)], key=lambda x: x[1])
-        ruin_nodes = [dist_to_node[i][0] for i in range(SubVRPTW_Environment.num_nodes_to_sample)]
-        self.sub_problem = get_sub_instance(ruin_nodes, self.cur_routes, self.problem)
-        self.sub_routes = [[] for _ in range(len(self.sub_problem["ori_routes"]))]
+        
+        while True:
+            route_idx = self.rng.integers(len(routes))
+            node_idx = self.rng.integers(len(routes[route_idx]))
+            node = routes[route_idx][node_idx]
+            nb_customers = len(self.all_customers) - 1
+            dist_to_node = sorted([(c, duration_matrix[node][c]+duration_matrix[c][node]) for c in range(1, nb_customers+1)], key=lambda x: x[1])
+            ruin_nodes = [dist_to_node[i][0] for i in range(SubVRPTW_Environment.num_nodes_to_sample)]
+            self.sub_problem = get_sub_instance(ruin_nodes, routes, self.problem)
+            self.sub_routes = [[] for _ in range(len(self.sub_problem["ori_routes"]))]
+            # assert len(self.sub_routes) <= max_num_nodes, f"{self.sub_routes}"
+            if len(self.sub_routes) <= max_num_route: break
+        
         self.order_to_dispatch = []
         for route in self.sub_problem["ori_routes"]: self.order_to_dispatch.extend(route)
-        depots = self.sub_problem["ori_starts"] + self.sub_problem["ori_stops"]
-        self.reward_norm = np.max(self.problem["duration_matrix"][self.order_to_dispatch+depots, self.order_to_dispatch+depots])
+        self.reward_norm = np.max(self.problem["duration_matrix"])
         self.init_total_cost = compute_route_cost(self.sub_problem["ori_routes"], self.problem, self.sub_problem)
 
     def get_route_cost(self):
@@ -149,21 +153,19 @@ class SubVRPTW_Environment(gym.Env):
             
     def get_state(self):
         cost_vec = np.zeros(max_num_route+1)
-        cost_vec[:] = -1.0
-        if self.cur_step < self.max_episode_steps - max_num_nodes: cost_vec[-1] = 0.0
-        cur_order = self.order_to_dispatch[0]
-        for route_idx, route in enumerate(self.sub_routes):
-            min_pos, min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
-            if min_pos is not None: cost_vec[route_idx] = (self.reward_norm - min_cost) / self.reward_norm
+        if self.cur_step < self._max_episode_steps - max_num_nodes: cost_vec[-1] = 1.0
+        if len(self.order_to_dispatch) > 0:
+            cur_order = self.order_to_dispatch[0]
+            for route_idx, route in enumerate(self.sub_routes):
+                min_pos, min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
+                if min_pos is not None: cost_vec[route_idx] = 1.0+(self.reward_norm - min_cost) / self.reward_norm
         cur_routes_encode_state = np.zeros((max_num_route, max_num_nodes_per_route*feature_dim))
-        for i, route_name in enumerate(self.route_name_list):
-            if route_name not in self.cur_routes: continue
-            if i+1 > max_num_route: break
-            route = self.cur_routes[route_name]
+        for i, route in enumerate(self.sub_routes):
+            if i >= max_num_route: break
             cur_routes_encode_state[i, :] = self.get_route_state(route)
         route_state = cur_routes_encode_state.reshape(-1)
         state = np.concatenate((cost_vec, route_state), axis=0)
-        orders_to_dispatch_state = np.zeros(max_num_nodes*feature_dim)
+        orders_to_dispatch_state = np.zeros((max_num_nodes,feature_dim))
         for i, order in enumerate(self.order_to_dispatch):
             if i >= max_num_nodes: break
             orders_to_dispatch_state[i, :] = extract_features_for_nodes(order, False, self.problem, self.sub_problem, self.node_embeddings)
@@ -172,7 +174,7 @@ class SubVRPTW_Environment(gym.Env):
         return state
 
     def step(self, action):
-        route_idx = action
+        route_idx = int(action)
         self.cur_step += 1
         if route_idx == max_num_route:
             self.order_to_dispatch = self.order_to_dispatch[1:] + [self.order_to_dispatch[0]]
@@ -185,7 +187,7 @@ class SubVRPTW_Environment(gym.Env):
             self.reward = (self.reward_norm-min_cost)/self.reward_norm
             self.sub_routes[route_idx] = route[:min_pos] + [cur_order] + route[min_pos:]
         self.state = self.get_state()
-        self.done = ((self.cur_step >= self.max_episode_steps) | len(self.order_to_dispatch) <= 0)
+        self.done = ((self.cur_step >= self._max_episode_steps) | len(self.order_to_dispatch) <= 0)
         if self.save_data: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
         return self.state, self.reward, self.done, {}
 
