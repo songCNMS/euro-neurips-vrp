@@ -13,7 +13,8 @@ import lkh
 
 
 route_output_dim = 128
-max_num_route = 48
+max_num_route = 4
+max_num_nodes = 100
 max_num_nodes_per_route = 32
 node_embedding_dim = 32
 depot = 0
@@ -445,7 +446,7 @@ class MLP_RL_Model(torch.nn.Module):
         else: self.final_layer = torch.nn.Softmax(dim=1)
         self.exploration_rate = 1.0
         self.rate_delta = 0.01
-        input_dim = max_num_nodes_per_route+route_output_dim*3
+        input_dim = 1+max_num_route+route_output_dim*3+feature_dim+feature_dim*3
         self.mlp = NN(input_dim=input_dim, 
                       layers_info=hyperparameters["linear_hidden_units"] + [hyperparameters["output_dim"]],
                       output_activation=None,
@@ -457,21 +458,11 @@ class MLP_RL_Model(torch.nn.Module):
 
     def forward(self, state):
         num_samples = state.size(0)
-        route_len = state[:, 0].cpu().numpy().astype(int)
-        route_cost_mask = state[:, 1:1+max_num_nodes_per_route]
-        # route_len_mask = np.zeros((num_samples, max_num_nodes_per_route))
-        # for i in range(num_samples):
-        #     route_len_mask[i, :route_len[i]] = 1.0
-        # route_len_mask = torch.from_numpy(route_len_mask).to(device)
-        state = state[:, 1+max_num_nodes_per_route:].reshape(num_samples, max_num_route+1, max_num_nodes_per_route*feature_dim)
+        route_cost_mask = state[:, :1+max_num_route]
+        route_states = state[:, 1+max_num_route:1+max_num_route+max_num_route*max_num_nodes_per_route*feature_dim].reshape(num_samples, max_num_route, max_num_nodes_per_route*feature_dim)
         route_rnn_output_list = []
-        if self.mlp_route: x_cr = self.route_model(state[:, 0, :])
-        else:
-            x_cr, _ = self.route_model(state[:, 0, :])
-            x_cr = x_cr[-1, :, :]
-        customers = state[:, 1:, :]
         for i in range(max_num_route):
-            x_r = customers[:, i, :]
+            x_r = route_states[:, i, :]
             if self.mlp_route: x_r = self.route_model(x_r)
             else:
                 x_r, _ = self.route_model(x_r)
@@ -479,11 +470,21 @@ class MLP_RL_Model(torch.nn.Module):
             route_rnn_output_list.append(x_r)
         x_r_mean = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
         x_r_max, _ = torch.stack(route_rnn_output_list, dim=1).max(axis=1)
-        x = torch.cat((route_cost_mask, x_cr, x_r_mean, x_r_max), axis=1)
+        x_r_min, _ = torch.stack(route_rnn_output_list, dim=1).min(axis=1)
+        x = torch.cat((route_cost_mask, x_r_mean, x_r_max, x_r_min), axis=1)
+        
+        orders_states = state[:, -max_num_nodes*feature_dim:].reshape(num_samples, max_num_nodes, feature_dim)
+        order_emb_output_list = []
+        for i in range(max_num_nodes):
+            order_emb_output_list.append(self.route_model.customer_model(orders_states[:, i, :]))
+        x_o_mean = torch.stack(order_emb_output_list, dim=1).mean(axis=1)
+        x_o_max, _ = torch.stack(order_emb_output_list, dim=1).max(axis=1)
+        x_o_min, _ = torch.stack(order_emb_output_list, dim=1).min(axis=1)
+        x = torch.cat((x, x_o_mean, x_o_max, x_o_min), axis=1)
         x = self.mlp(x)
         x = self.final_layer(x)
         if self.key_to_use != 'Actor': x = torch.mul(x, 100.0)
-        out = torch.mul(x, route_cost_mask>0.0)
+        out = torch.mul(x, route_cost_mask>=0.0)
         return out
     
 def get_route_mask(route_nums):
@@ -781,101 +782,6 @@ def select_candidate_points(routes, distance_matrix, all_customers, only_short_r
     node_idx = np.random.randint(0, len(route)-1)
     M = extend_candidate_points(route, node_idx, distance_matrix, all_customers)
     return M
-
-
-def read_elem(filename):
-    with open(filename) as f:
-        return [str(elem) for elem in f.read().split()]
-
-# The input files follow the "Solomon" format.
-def read_input_cvrptw(filename):
-    file_it = iter(read_elem(filename))
-
-    for i in range(4): next(file_it)
-
-    nb_trucks = int(next(file_it))
-    truck_capacity = int(next(file_it))
-
-    for i in range(13): next(file_it)
-
-    warehouse_x = int(next(file_it))
-    warehouse_y = int(next(file_it))
-
-    for i in range(2): next(file_it)
-
-    max_horizon = int(next(file_it))
-
-    next(file_it)
-
-    customers_x = []
-    customers_y = []
-    demands = []
-    earliest_start = []
-    latest_end = []
-    service_time = []
-
-    while (1):
-        val = next(file_it, None)
-        if val is None: break
-        i = int(val) - 1
-        customers_x.append(int(next(file_it)))
-        customers_y.append(int(next(file_it)))
-        demands.append(int(next(file_it)))
-        ready = int(next(file_it))
-        due = int(next(file_it))
-        stime = int(next(file_it))
-        earliest_start.append(ready)
-        latest_end.append(due + stime)  # in input files due date is meant as latest start time
-        service_time.append(stime)
-
-    nb_customers = i + 1
-
-    # Compute distance matrix
-    distance_matrix = compute_distance_matrix(customers_x, customers_y)
-    distance_warehouses = compute_distance_warehouses(warehouse_x, warehouse_y, customers_x, customers_y)
-
-    return (nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
-            earliest_start, latest_end, max_horizon, warehouse_x, warehouse_y, customers_x, customers_y)
-
-
-# Computes the distance matrix
-def compute_distance_matrix(customers_x, customers_y):
-    nb_customers = len(customers_x)
-    distance_matrix = [[None for i in range(nb_customers)] for j in range(nb_customers)]
-    for i in range(nb_customers):
-        distance_matrix[i][i] = 0
-        for j in range(nb_customers):
-            dist = compute_dist(customers_x[i], customers_x[j], customers_y[i], customers_y[j])
-            distance_matrix[i][j] = dist
-            distance_matrix[j][i] = dist
-    return distance_matrix
-
-
-# Computes the distances to warehouse
-def compute_distance_warehouses(depot_x, depot_y, customers_x, customers_y):
-    nb_customers = len(customers_x)
-    distance_warehouses = [None] * nb_customers
-    for i in range(nb_customers):
-        dist = compute_dist(depot_x, customers_x[i], depot_y, customers_y[i])
-        distance_warehouses[i] = dist
-    return distance_warehouses
-
-
-def compute_dist(xi, xj, yi, yj):
-    return int(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)))
-    # return int(round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)*100)
-
-def compute_dist_float(xi, xj, yi, yj):
-    return round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)
-
-
-def compute_cost_from_routes(cur_routes, coords):
-    total_cost = 0.0
-    for j in range(len(cur_routes)):
-        _route = [0] + list(cur_routes[j]) + [0]
-        for i in range(len(_route)-1):
-            total_cost += compute_dist_float(coords[_route[i]][0], coords[_route[i+1]][0], coords[_route[i]][1], coords[_route[i+1]][1])
-    return round(total_cost, 2)
 
 
 # depots = dat.depots1

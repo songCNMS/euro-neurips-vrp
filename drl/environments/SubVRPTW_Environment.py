@@ -19,6 +19,41 @@ from cvrptw_utility import *
 from rl_data_generate import construct_solution_from_ge_solver
 
 
+def check_route_validity(route, route_idx, problem, sub_problem):
+    if problem["demands"][route].sum() > sub_problem["capacities"][route_idx]: return False
+    latest_stop_time = sub_problem["stop_times"][route_idx]
+    start_depot = sub_problem["ori_starts"][route_idx]
+    stop_depot = sub_problem["ori_stops"][route_idx]
+    cur_time = max(sub_problem["start_times"][route_idx], problem["time_windows"][start_depot, 0])
+    prev_node = start_depot
+    for c in route + [stop_depot]:
+        cur_time += problem["service_times"][prev_node] + problem["duration_matrix"][prev_node, c]
+        if cur_time > problem["time_windows"][c, 1]: return False
+        cur_time = min(cur_time, problem["time_windows"][c, 0])
+        prev_node = c
+    return cur_time <= latest_stop_time
+
+def greedy_insertion(route, route_idx, node, problem, sub_problem):
+    min_pos, min_cost = None, float("inf")
+    if problem["demands"][route+[node]].sum() > sub_problem["capacities"][route_idx]: return min_pos, min_cost
+    start_depot = sub_problem["ori_starts"][route_idx]
+    stop_depot = sub_problem["ori_stops"][route_idx]
+    full_route = [start_depot] + route + [stop_depot]
+    for i in range(len(route)+1):
+        new_route = route[:i] + [node] + route[i:]
+        if check_route_validity(new_route, route_idx, problem, sub_problem):
+            dist = (-problem["duration_matrix"][full_route[i], full_route[i+1]]
+                     + problem["duration_matrix"][full_route[i], node]
+                     + problem["duration_matrix"][node, full_route[i+1]])
+            if dist < min_cost:
+                min_pos, min_cost = i, dist
+    return min_pos, min_cost
+
+def compute_route_cost(routes, problem, sub_problem):
+    start_depots = sub_problem["ori_starts"]
+    stop_depots = sub_problem["ori_stops"]
+    return np.sum([tools.compute_route_driving_time([start_depots[route_idx]] + routes[route_idx] + [stop_depots[route_idx]], problem["duration_matrix"]) for route_idx in range(len(routes))])
+
 class SubVRPTW_Environment(gym.Env):
     environment_name = "VRPTW Environment"
     num_nodes_to_sample = 16
@@ -32,28 +67,22 @@ class SubVRPTW_Environment(gym.Env):
         self.mode = 'train'
         self.reset()
         self.cur_step = 0
-        self._max_episode_steps = max_num_nodes_per_route*max_num_route
+        self._max_episode_steps = max_num_nodes*4
         self.max_episode_steps = self._max_episode_steps
-        self.switch_route_early_stop = 1
-        self.early_stop_steps = max_num_route * self.switch_route_early_stop
-        self.steps_not_improved = 0
-        self.steps_not_improvoed_same_route = 0
         self.trials = 10
         self.reward_threshold = float("inf")
         self.id = "SubVRPTW"
-        self.num_states = 1+max_num_nodes_per_route+(max_num_route+1)*max_num_nodes_per_route*feature_dim
+        self.num_states = 1+max_num_route+max_num_route*max_num_nodes_per_route*feature_dim+max_num_nodes*feature_dim
         self.observation_space = spaces.Box(
             low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
-        self.action_space = spaces.Discrete(max_num_nodes_per_route)
-        self.cur_route_name = "PATH_0"
-        self.cur_cost = None
+        self.action_space = spaces.Discrete(1+max_num_route)
         
     def seed(self, s):
         self.rd_seed = s
         self.rng = np.random.default_rng(s)
 
-    def load_problem(self, problem_file, routes, cur_route_name):
+    def load_problem(self, problem_file, routes):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
@@ -65,44 +94,14 @@ class SubVRPTW_Environment(gym.Env):
         self.problem_file = f"{dir_name}/{problem_file}"
         print("loading problem: ", self.problem_name, self.rd_seed)
         if self.instance != 'ortec':
-            (nb_customers, nb_trucks, truck_capacity, 
-            distance_matrix, distance_warehouses, demands, service_time,
-                earliest_start, latest_end, max_horizon, 
-                    warehouse_x, warehouse_y, customers_x, customers_y) = read_input_cvrptw(self.problem_file)
             self.problem = tools.read_solomon(self.problem_file)
         else:
-            problem = tools.read_vrplib(self.problem_file)
-            self.problem = problem
-            nb_customers = len(problem['is_depot']) - 1
-            _time_windows = problem['time_windows']
-            _duration_matrix = problem['duration_matrix']
-            _service_times = problem['service_times']
-            _demands = problem['demands']
-            distance_matrix = np.zeros((nb_customers, nb_customers))
-            distance_warehouses = np.zeros(nb_customers)
-            earliest_start, latest_end, service_time, demands, max_horizon = [], [], [], [], _time_windows[0][1]
-            for i in range(nb_customers):
-                distance_warehouses[i] = _duration_matrix[0][i+1]
-                earliest_start.append(_time_windows[i+1][0])
-                latest_end.append(_time_windows[i+1][1])
-                service_time.append(_service_times[i+1])
-                demands.append(_demands[i+1])
-                for j in range(nb_customers):
-                    distance_matrix[i][j] = _duration_matrix[i+1][j+1]
-        
-        self.truck_capacity = self.problem['capacity']
-        self.max_distance = max(np.max(distance_matrix), np.max(distance_warehouses))
-        self.all_customers, self.demands_dict, self.service_time_dict,\
-            self.earliest_start_dict, self.latest_end_dict, self.distance_matrix_dict\
-                = get_problem_dict(nb_customers,
-                                   demands, service_time, 
-                                   earliest_start, latest_end, max_horizon, 
-                                   distance_warehouses, distance_matrix)
-        
+            self.problem = tools.read_vrplib(self.problem_file)
+        self.all_customers = list(range(len(self.problem["demands"])))
         spectral = Spectral(n_components=node_embedding_dim)
         self.node_embeddings = {}
         node_embeddings_array = spectral.fit_transform(self.problem['duration_matrix'])
-        for i, c in enumerate([depot] + self.all_customers): self.node_embeddings[c] = node_embeddings_array[i, :]
+        for i, c in enumerate(self.all_customers): self.node_embeddings[c] = node_embeddings_array[i, :]
         if routes is None:
             solution_file_name = f"{self.data_dir}/cvrp_benchmarks/RL_train_data/{self.problem_name}.npy"
             tmp_file_name =  f'tmp/{self.problem_name}'
@@ -113,40 +112,32 @@ class SubVRPTW_Environment(gym.Env):
                 os.makedirs(tmp_file_name, exist_ok=True)
                 _routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=tmp_file_name, time_limit=240)
                 np.save(solution_file_name, np.array(_routes))
-            routes = {}
-            for i, route in enumerate(_routes):
-                path_name = f"PATH{i}"
-                routes[path_name] = [f"Customer_{c}" for c in route]
-        self.cur_routes = routes
-        self.init_total_cost = self.get_route_cost()
-        self.route_name_list = sorted(list(self.cur_routes.keys()))
-        self.cur_route_idx = 0
-        self.cur_route_name = self.route_name_list[self.cur_route_idx]
         duration_matrix = self.problem["duration_matrix"]
         route_idx = self.rng.integers(len(self.route_name_list))
-        node_idx = np.random.randint(len(self.cur_routes[route_idx]))
+        node_idx = self.rng.integers(len(self.cur_routes[route_idx]))
         node = self.cur_routes[route_idx][node_idx]
+        nb_customers = len(self.all_customers) - 1
         dist_to_node = sorted([(c, duration_matrix[node][c]+duration_matrix[c][node]) for c in range(1, nb_customers+1)], key=lambda x: x[1])
         ruin_nodes = [dist_to_node[i][0] for i in range(SubVRPTW_Environment.num_nodes_to_sample)]
         self.sub_problem = get_sub_instance(ruin_nodes, self.cur_routes, self.problem)
-        self.sub_routes = [[s, e] for s, e in zip(self.sub_problem["ori_starts"], self.sub_problem["ori_stops"])]
+        self.sub_routes = [[] for _ in range(len(self.sub_problem["ori_routes"]))]
         self.order_to_dispatch = []
         for route in self.sub_problem["ori_routes"]: self.order_to_dispatch.extend(route)
-            
-    def reset(self, problem_file=None, routes=None, cur_route=None):
+        depots = self.sub_problem["ori_starts"] + self.sub_problem["ori_stops"]
+        self.reward_norm = np.max(self.problem["duration_matrix"][self.order_to_dispatch+depots, self.order_to_dispatch+depots])
+        self.init_total_cost = compute_route_cost(self.sub_problem["ori_routes"], self.problem, self.sub_problem)
+
+    def get_route_cost(self):
+        return compute_route_cost(self.sub_routes, self.problem, self.sub_problem)
+    
+
+    def reset(self, problem_file=None, routes=None):
         # self.load_problem("ORTEC-VRPTW-ASYM-50d1f78d-d1-n329-k19.txt", routes, cur_route)
-        self.load_problem(problem_file, routes, cur_route)
-        self.steps_not_improved = 0
-        self.steps_not_improvoed_same_route = 0
+        self.load_problem(problem_file, routes)
         self.cur_step = 0
-        self.switch_route_early_stop = 1
-        self.early_stop_steps = len(self.route_name_list) * self.switch_route_early_stop
         self.state = self.get_state()
         if self.save_data: self.local_experience_buffer = [np.copy(self.state)]
         return self.state
-
-    def get_route_cost(self):
-        return compute_route_cost(self.cur_routes, self.distance_matrix_dict)
     
     def get_route_state(self, route):
         route_state = np.zeros(max_num_nodes_per_route*feature_dim)
@@ -157,59 +148,44 @@ class SubVRPTW_Environment(gym.Env):
         return route_state
             
     def get_state(self):
-        improvement_vec = np.zeros(max_num_nodes_per_route)
-        cur_route = self.cur_routes.get(self.cur_route_name, [])
-        improvement_vec[0] = 1.0
-        for node_idx in range(1, min(max_num_nodes_per_route, len(cur_route))):
-            improvement_vec[node_idx], _ = self.get_improve(cur_route, node_idx)
-        max_improvement, min_improvement = np.max(improvement_vec), np.min(improvement_vec)
-        if max_improvement - min_improvement > 0.0: improvement_vec = (improvement_vec-min_improvement) / (max_improvement - min_improvement)
-        cur_route_state = self.get_route_state(cur_route)
-        cur_routes_encode_state = np.zeros((max_num_route+1, max_num_nodes_per_route*feature_dim))
-        cur_routes_encode_state[0, :] = cur_route_state
+        cost_vec = np.zeros(max_num_route+1)
+        cost_vec[:] = -1.0
+        if self.cur_step < self.max_episode_steps - max_num_nodes: cost_vec[-1] = 0.0
+        cur_order = self.order_to_dispatch[0]
+        for route_idx, route in enumerate(self.sub_routes):
+            min_pos, min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
+            if min_pos is not None: cost_vec[route_idx] = (self.reward_norm - min_cost) / self.reward_norm
+        cur_routes_encode_state = np.zeros((max_num_route, max_num_nodes_per_route*feature_dim))
         for i, route_name in enumerate(self.route_name_list):
             if route_name not in self.cur_routes: continue
             if i+1 > max_num_route: break
             route = self.cur_routes[route_name]
-            cur_routes_encode_state[i+1, :] = self.get_route_state(route)
-        state = cur_routes_encode_state.reshape(-1)
-        state = np.concatenate(([len(cur_route)], improvement_vec, state), axis=0)
+            cur_routes_encode_state[i, :] = self.get_route_state(route)
+        route_state = cur_routes_encode_state.reshape(-1)
+        state = np.concatenate((cost_vec, route_state), axis=0)
+        orders_to_dispatch_state = np.zeros(max_num_nodes*feature_dim)
+        for i, order in enumerate(self.order_to_dispatch):
+            if i >= max_num_nodes: break
+            orders_to_dispatch_state[i, :] = extract_features_for_nodes(order, False, self.problem, self.sub_problem, self.node_embeddings)
+        orders_to_dispatch_state = orders_to_dispatch_state.reshape(-1)
+        state = np.concatenate((state, orders_to_dispatch_state), axis=0)
         return state
-        
-    def get_improve(self, route, node_idx):
-        M = extend_candidate_points(route, node_idx, self.distance_matrix_dict, self.all_customers)
-        cur_routes, _, cost_reduction =\
-                heuristic_improvement_with_candidates(self.cur_routes, M, self.truck_capacity, 
-                                                    self.demands_dict, self.service_time_dict, 
-                                                    self.earliest_start_dict, self.latest_end_dict,
-                                                    self.distance_matrix_dict)
-        # cost_reduction - positive: shorter path, negative: longer path (not improved)
-        return self.reward_shaping(cost_reduction), cur_routes
-    
-    def reward_shaping(self, cost_reduction):
-        return max(0.0, 0.0 if (cost_reduction is None) else cost_reduction/100.0)
 
     def step(self, action):
-        node_idx = action
-        route = self.cur_routes[self.cur_route_name]
-        assert node_idx < len(route), f"state: {self.state[0]}, node: {node_idx}, route: {len(route)}"
+        route_idx = action
         self.cur_step += 1
-        self.steps_not_improved += 1
-        if node_idx > 0:
-            cost_reduction, _routes = self.get_improve(route, node_idx)
-            if cost_reduction > 0.0:
-                self.steps_not_improved = 0
-                self.cur_routes = _routes
-            self.reward = cost_reduction
-        else:
-            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
+        if route_idx == max_num_route:
+            self.order_to_dispatch = self.order_to_dispatch[1:] + [self.order_to_dispatch[0]]
             self.reward = 0.0
-        while True:
-            self.cur_route_name = self.route_name_list[self.cur_route_idx]
-            if len(self.cur_routes.get(self.cur_route_name, [])) > 0: break
-            self.cur_route_idx = (self.cur_route_idx + 1) % len(self.route_name_list)
+        else:
+            cur_order = self.order_to_dispatch[0]
+            self.order_to_dispatch = self.order_to_dispatch[1:]
+            route = self.sub_routes[route_idx]
+            min_pos, min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
+            self.reward = (self.reward_norm-min_cost)/self.reward_norm
+            self.sub_routes[route_idx] = route[:min_pos] + [cur_order] + route[min_pos:]
         self.state = self.get_state()
-        self.done = ((self.steps_not_improved >= self.early_stop_steps) | (self.cur_step >= self.max_episode_steps))
+        self.done = ((self.cur_step >= self.max_episode_steps) | len(self.order_to_dispatch) <= 0)
         if self.save_data: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
         return self.state, self.reward, self.done, {}
 
@@ -223,19 +199,6 @@ class SubVRPTW_Environment(gym.Env):
             f = f"{loc_dir}/{self.rng.integers(0, 100000)}.dp"
             with open(f, "wb") as output_file:
                 cPickle.dump(self.local_experience_buffer, output_file)
-
-
-def generate_env_data(idx, num_envs, instance, data_dir):
-    env = VRPTW_Environment(instance, data_dir, save_data=True, seed=idx)
-    for i in range(num_envs):
-        state = env.reset()
-        print("epoch: ", i, "problem: ", env.problem_name)
-        done = False
-        while not done:
-            action = env.rng.integers(min(int(state[0]), max_num_nodes_per_route))
-            state, _, done, _ = env.step(action)
-            print("epoch: ", i, "problem: ", env.problem_name, "step: ", env.cur_step, "reward: ", env.reward)
-        env.save_experience(f"{data_dir}/vrptw_{instance}/")
     
 
 import argparse
@@ -246,17 +209,4 @@ if __name__ == "__main__":
     parser.add_argument("--remote", action="store_true")
     parser.add_argument("--mp", type=int, default=1)
     args = parser.parse_args()
-    if args.remote:
-        data_dir = os.getenv("AMLT_DATA_DIR", "cvrp_benchmarks/")
-    else:
-        data_dir = "./"
-
-    if args.mp == 1: generate_env_data(1, 100, args.instance, data_dir)
-    else:
-        procs = []
-        for idx in range(args.mp):
-            proc = mp.Process(target=generate_env_data, args=(idx, 100, args.instance, data_dir))
-            procs.append(proc)
-            proc.start()
-        for proc in procs:
-            proc.join()
+    pass

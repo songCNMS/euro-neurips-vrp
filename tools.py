@@ -1,7 +1,103 @@
 import json
 import os
 import numpy as np
-from cvrptw_utility import read_input_cvrptw
+import math
+
+
+def read_elem(filename):
+    with open(filename) as f:
+        return [str(elem) for elem in f.read().split()]
+
+# The input files follow the "Solomon" format.
+def read_input_cvrptw(filename):
+    file_it = iter(read_elem(filename))
+
+    for i in range(4): next(file_it)
+
+    nb_trucks = int(next(file_it))
+    truck_capacity = int(next(file_it))
+
+    for i in range(13): next(file_it)
+
+    warehouse_x = int(next(file_it))
+    warehouse_y = int(next(file_it))
+
+    for i in range(2): next(file_it)
+
+    max_horizon = int(next(file_it))
+
+    next(file_it)
+
+    customers_x = []
+    customers_y = []
+    demands = []
+    earliest_start = []
+    latest_end = []
+    service_time = []
+
+    while (1):
+        val = next(file_it, None)
+        if val is None: break
+        i = int(val) - 1
+        customers_x.append(int(next(file_it)))
+        customers_y.append(int(next(file_it)))
+        demands.append(int(next(file_it)))
+        ready = int(next(file_it))
+        due = int(next(file_it))
+        stime = int(next(file_it))
+        earliest_start.append(ready)
+        latest_end.append(due + stime)  # in input files due date is meant as latest start time
+        service_time.append(stime)
+
+    nb_customers = i + 1
+
+    # Compute distance matrix
+    distance_matrix = compute_distance_matrix(customers_x, customers_y)
+    distance_warehouses = compute_distance_warehouses(warehouse_x, warehouse_y, customers_x, customers_y)
+
+    return (nb_customers, nb_trucks, truck_capacity, distance_matrix, distance_warehouses, demands, service_time,
+            earliest_start, latest_end, max_horizon, warehouse_x, warehouse_y, customers_x, customers_y)
+
+
+# Computes the distance matrix
+def compute_distance_matrix(customers_x, customers_y):
+    nb_customers = len(customers_x)
+    distance_matrix = [[None for i in range(nb_customers)] for j in range(nb_customers)]
+    for i in range(nb_customers):
+        distance_matrix[i][i] = 0
+        for j in range(nb_customers):
+            dist = compute_dist(customers_x[i], customers_x[j], customers_y[i], customers_y[j])
+            distance_matrix[i][j] = dist
+            distance_matrix[j][i] = dist
+    return distance_matrix
+
+
+# Computes the distances to warehouse
+def compute_distance_warehouses(depot_x, depot_y, customers_x, customers_y):
+    nb_customers = len(customers_x)
+    distance_warehouses = [None] * nb_customers
+    for i in range(nb_customers):
+        dist = compute_dist(depot_x, customers_x[i], depot_y, customers_y[i])
+        distance_warehouses[i] = dist
+    return distance_warehouses
+
+
+def compute_dist(xi, xj, yi, yj):
+    return int(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)))
+    # return int(round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)*100)
+
+def compute_dist_float(xi, xj, yi, yj):
+    return round(math.sqrt(math.pow(xi - xj, 2) + math.pow(yi - yj, 2)), 2)
+
+
+def compute_cost_from_routes(cur_routes, coords):
+    total_cost = 0.0
+    for j in range(len(cur_routes)):
+        _route = [0] + list(cur_routes[j]) + [0]
+        for i in range(len(_route)-1):
+            total_cost += compute_dist_float(coords[_route[i]][0], coords[_route[i+1]][0], coords[_route[i]][1], coords[_route[i+1]][1])
+    return round(total_cost, 2)
+
 
 
 # https://stackoverflow.com/questions/26646362/numpy-array-is-not-json-serializable
