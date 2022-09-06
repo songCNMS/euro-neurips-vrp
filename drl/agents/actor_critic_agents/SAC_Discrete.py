@@ -138,7 +138,7 @@ class SAC_Discrete(SAC):
     def multi_step_opt(self, problem):
         cur_routes = self.eval_environment.ori_full_routes
         ori_total_cost = tools.compute_solution_driving_time(self.eval_environment.problem, cur_routes)
-        for step in range(100):
+        for step in range(200):
             state = self.eval_environment.reset(problem_file=problem, routes=cur_routes)
             done = False
             init_cost = self.eval_environment.init_total_cost
@@ -156,8 +156,7 @@ class SAC_Discrete(SAC):
                     route = cur_routes[ori_route_idx][:]
                     cur_routes[ori_route_idx] = route[:start_idx] + sub_route + route[end_idx:]
                 cur_routes = [_route for _route in cur_routes if len(_route) > 0]                   
-        new_total_cost = tools.compute_solution_driving_time(
-            self.eval_environment.problem, cur_routes)
+        new_total_cost = tools.validate_static_solution(self.eval_environment.problem, cur_routes)
         return ori_total_cost, new_total_cost
             
     def eval(self):
