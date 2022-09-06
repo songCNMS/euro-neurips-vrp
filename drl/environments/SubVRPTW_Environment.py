@@ -29,7 +29,7 @@ def check_route_validity(route, route_idx, problem, sub_problem):
     for c in route + [stop_depot]:
         cur_time += problem["service_times"][prev_node] + problem["duration_matrix"][prev_node, c]
         if cur_time > problem["time_windows"][c, 1]: return False
-        cur_time = min(cur_time, problem["time_windows"][c, 0])
+        cur_time = max(cur_time, problem["time_windows"][c, 0])
         prev_node = c
     return cur_time <= latest_stop_time
 
