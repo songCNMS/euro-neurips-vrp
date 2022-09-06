@@ -12,6 +12,7 @@ import pandas as pd
 import os
 import random
 torch.autograd.set_detect_anomaly(False)
+import tools
 
 
 class SAC_Discrete(SAC):
@@ -134,6 +135,31 @@ class SAC_Discrete(SAC):
         # else: return MLP_Route_RL_Model(hyperparameters).to(self.device)
         return MLP_RL_Model(hyperparameters).to(self.device)
     
+    def multi_step_opt(self, problem):
+        cur_routes = self.eval_environment.ori_full_routes
+        ori_total_cost = tools.compute_solution_driving_time(self.eval_environment.problem, cur_routes)
+        for step in range(100):
+            state = self.eval_environment.reset(problem_file=problem, routes=cur_routes)
+            done = False
+            init_cost = self.eval_environment.init_total_cost
+            while not done:
+                action = self.actor_pick_action(state=state, eval=True)
+                state, reward, done, _ = self.eval_environment.step(action)
+                print(f"opt step: {step}, problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, {self.eval_environment._max_episode_steps}, action: {action}, reward: {reward} \n ")
+            cur_final_cost = self.eval_environment.get_route_cost()
+            if cur_final_cost < init_cost:
+                start_idxs, end_idxs = self.eval_environment.sub_problem["start_idxs"], self.eval_environment.sub_problem["end_idxs"]
+                ori_route_idxs = self.eval_environment.sub_problem["ori_route_idxs"]
+                for route_idx, sub_route in enumerate(self.eval_environment.sub_routes):
+                    start_idx, end_idx = start_idxs[route_idx], end_idxs[route_idx]
+                    ori_route_idx = ori_route_idxs[route_idx]
+                    route = cur_routes[ori_route_idx][:]
+                    cur_routes[ori_route_idx] = route[:start_idx] + sub_route + route[end_idx:]
+                cur_routes = [_route for _route in cur_routes if len(_route) > 0]                   
+        new_total_cost = tools.compute_solution_driving_time(
+            self.eval_environment.problem, cur_routes)
+        return ori_total_cost, new_total_cost
+            
     def eval(self):
         self.eval_environment.switch_mode("eval")
         total_reward = 0.0
@@ -145,12 +171,15 @@ class SAC_Discrete(SAC):
         # problem_list = [p for p in problem_list if (p.split('_')[0] in ["R1", "C1", "RC1"])]
         # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
         # problem_list = ["ORTEC-VRPTW-ASYM-55a26fb1-d1-n326-k25.txt"]
-        eval_rounds = min(500, len(problem_list))
+        eval_rounds = min(10, len(problem_list))
+        succeed_instances = 0
+        rl_better_instances = 0
         init_cost, final_cost, hybrid_cost = 0.0, 0.0, 0.0
+        init_full_cost, final_full_cost = 0.0, 0.0
         problem_reward_list = []
         for i in range(eval_rounds):
             problem = problem_list[i]
-            hybrid_cost += hybrid_res[problem]
+            # hybrid_cost += hybrid_res[problem]
             state = self.eval_environment.reset(problem_file=problem)
             init_cost += self.eval_environment.init_total_cost
             done = False
@@ -158,14 +187,29 @@ class SAC_Discrete(SAC):
             while not done:
                 action = self.actor_pick_action(state=state, eval=True)
                 state, reward, done, _ = self.eval_environment.step(action)
-                print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, early_stop_round: {self.eval_environment.steps_not_improved}, action: {action}, reward: {reward} \n ")
+                print(f"problem: {self.eval_environment.problem_name}, cur_step: {self.eval_environment.cur_step}, {self.eval_environment._max_episode_steps}, action: {action}, reward: {reward} \n ")
                 if reward >= 0: _total_reward += reward
             problem_reward_list.append(_total_reward)
             total_reward += _total_reward
-            final_cost += self.eval_environment.get_route_cost()
+            cur_final_cost = self.eval_environment.get_route_cost()
+            final_cost += cur_final_cost
+            if len(self.eval_environment.order_to_dispatch) == 0: succeed_instances += 1
+            if cur_final_cost < self.eval_environment.init_total_cost: rl_better_instances += 1
+            _init_full_cost, _final_full_cost = self.multi_step_opt(problem)
+            init_full_cost += _init_full_cost
+            final_full_cost += _final_full_cost
+            
         self.eval_environment.switch_mode("train")
         print("problem reward: ", problem_reward_list)
-        return total_reward/eval_rounds, init_cost/eval_rounds, final_cost/eval_rounds, hybrid_cost/eval_rounds
+        res = {"cost_reduction": total_reward/eval_rounds,
+               "init_cost": init_cost/eval_rounds,
+               "final_cost": final_cost/eval_rounds,
+               "hybrid_cost": hybrid_cost/eval_rounds,
+               "success_ratio": float(succeed_instances/eval_rounds),
+               "rl_better_instances": rl_better_instances,
+               "init_full_cost": init_full_cost/eval_rounds,
+               "final_full_cost": final_full_cost/eval_rounds}
+        return res
     
     def print_summary_of_latest_evaluation_episode(self):
         """Prints a summary of the latest episode"""

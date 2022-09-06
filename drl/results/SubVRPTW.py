@@ -147,7 +147,7 @@ if __name__ == "__main__":
             "learning_rate": 0.0003,
             "linear_hidden_units": [256, 256],
             "gradient_clipping_norm": 1.0,
-            "discount_rate": 0.95,
+            "discount_rate": 0.99,
             "epsilon_decay_rate_denominator": 1.0,
             "normalise_rewards": True,
             "exploration_worker_difference": 2.0,
@@ -156,7 +156,7 @@ if __name__ == "__main__":
             "Actor": {
                 "learning_rate": 0.0001,
                 "linear_hidden_units": [256, 256],
-                "hidden_activations": "relu",
+                "hidden_activations": "tanh",
                 "final_layer_activation": "Softmax",
                 "batch_norm": False,
                 "tau": 0.01,
@@ -167,7 +167,7 @@ if __name__ == "__main__":
             "Critic": {
                 "learning_rate": 0.0003,
                 "linear_hidden_units": [256, 256],
-                "hidden_activations": "relu",
+                "hidden_activations": "tanh",
                 "final_layer_activation": None,
                 "batch_norm": False,
                 "buffer_size": 512000,
@@ -176,17 +176,17 @@ if __name__ == "__main__":
                 "initialiser": "Xavier"
             },
 
-            "min_steps_before_learning": 64,
+            "min_steps_before_learning": 256,
             "batch_size": 256,
-            "discount_rate": 1.0,
+            "discount_rate": 0.99,
             "mu": 0.0, #for O-H noise
             "theta": 0.15, #for O-H noise
             "sigma": 0.25, #for O-H noise
             "action_noise_std": 0.2,  # for TD3
             "action_noise_clipping_range": 0.5,  # for TD3
             "update_every_n_steps": 128, # how frequency learn is run
-            "learning_updates_per_learning_session": 64, # how many iterations per learn
-            "automatically_tune_entropy_hyperparameter": True,
+            "learning_updates_per_learning_session": 16, # how many iterations per learn
+            "automatically_tune_entropy_hyperparameter": False,
             "entropy_term_weight": 2.0,
             "add_extra_noise": False,
             "do_evaluation_iterations": True,
@@ -231,17 +231,14 @@ if __name__ == "__main__":
             print("eval rounds: ", new_eval_list)
             for eval_round in new_eval_list:
                 agent.load_policy(eval_round)
-                total_reward, init_cost, final_cost, hybrid_cost = agent.eval()
-                res = {"cost_reduction": total_reward,
-                        "init_cost": init_cost,
-                        "final_cost": final_cost,
-                        "hybrid_cost": hybrid_cost}
+                res = agent.eval()
                 wandb.log(res)
+                total_reward = res["cost_reduction"]
                 agent.eval_reward_list.append(total_reward)
                 print("Eval reward {}, best reward {} ".format(total_reward, np.max(agent.eval_reward_list)))
                 print("History rewards: ", agent.eval_reward_list)
                 print(res)
                 print("----------------------------")
-            time.sleep(3600)
+            time.sleep(360)
 
 

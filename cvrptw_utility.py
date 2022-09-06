@@ -14,8 +14,8 @@ import lkh
 
 route_output_dim = 128
 max_num_route = 4
-max_num_nodes = 100
-max_num_nodes_per_route = 32
+max_num_nodes = 64
+max_num_nodes_per_route = 16
 node_embedding_dim = 32
 depot = 0
 feature_dim = 7+node_embedding_dim # (is_start, is_end, is_on_route, service_time, earlieast_time, latest_time, demand) + node_embedding
@@ -75,7 +75,7 @@ def extract_features_for_nodes(node, is_on_route, problem, sub_problem, node_emb
     node_feature = np.zeros(feature_dim)
     earliest_start_time = np.min(sub_problem['start_times'])
     latest_end_time = np.max(sub_problem["stop_times"])
-    max_duration = latest_end_time-earliest_start_time
+    max_duration = max(1.0, latest_end_time-earliest_start_time)
     node_feature[0] = (1 if node in sub_problem["ori_starts"] else 0)
     node_feature[1] = (1 if node in sub_problem["ori_stops"] else 0)
     node_feature[2] = (1 if is_on_route else 0)
@@ -486,6 +486,7 @@ class MLP_RL_Model(torch.nn.Module):
         x = self.mlp(x)
         x = self.final_layer(x)
         if self.key_to_use != 'Actor': x = torch.mul(x, 100.0)
+        x = torch.add(x, 1e-3)
         out = torch.mul(x, route_cost_mask>0.0)
         return out
     
@@ -896,7 +897,7 @@ def get_sub_instance(ruin_nodes, solution, instance):
     ori_routes, ori_starts, ori_stops = [], [], []
     capacities, start_times, stop_times = [], [], []
     start_idxs, end_idxs = [], []
-    for route_idx in ori_route_idxs:
+    for route_idx in ori_route_idxs[:max_num_route]:
         route = solution[route_idx]
         node_idxs = [n[0] for n in selected_nodes[route_idx]]
         start_idx, end_idx = np.min(node_idxs), np.max(node_idxs)+1
