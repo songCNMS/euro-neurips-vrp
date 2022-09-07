@@ -89,25 +89,26 @@ class SAC(Base_Agent):
         eval_ep = (self.episode_number+1) % TRAINING_EPISODES_PER_EVAL_EPISODE == 0 and self.do_evaluation_iterations
         self.episode_step_number_val = 0
         _done = False
-        self.actor_local.exploration_rate = max(0.05, self.actor_local.exploration_rate-self.actor_local.rate_delta)
+        if self.is_vec_env: dones = [False]*self.environment.num_envs
         while not _done:
             self.episode_step_number_val += 1
-            if self.is_vec_env: self.action = np.array([self.pick_action(eval_ep, state=state) for i, state in enumerate(self.state)])
-            else: self.action = self.pick_action(eval_ep)
+            if self.is_vec_env: self.action = self.pick_action(eval_ep, state=self.state)
+            else: self.action = self.pick_action(eval_ep, state=self.state)[0]
             self.conduct_action(self.action)
             if self.time_for_critic_and_actor_to_learn():
                 for _ in range(self.hyperparameters["learning_updates_per_learning_session"]):
                     self.learn()
             if not self.is_vec_env:
-                mask = False if self.episode_step_number_val >= self.environment._max_episode_steps else self.done
-                if not eval_ep and self.reward >= 0.0: self.save_experience(experience=(self.state, self.action, self.reward, self.next_state, mask))
+                mask = True if self.episode_step_number_val >= self.environment._max_episode_steps else self.done
+                if not eval_ep: self.save_experience(experience=(self.state, self.action, self.reward, self.next_state, mask))
             else:
                 for i in range(self.environment.num_envs):
-                    mask = False if self.episode_step_number_val >= self.environment.envs[i].max_episode_steps else self.done[i]
-                    if not eval_ep and self.reward[i] >= 0.0: self.save_experience(experience=(self.state[i], self.action[i], self.reward[i], self.next_state[i], mask))
+                    mask = True if self.episode_step_number_val >= self.environment.envs[i].max_episode_steps else self.done[i]
+                    if (not eval_ep) and (not dones[i]): self.save_experience(experience=(self.state[i], self.action[i], self.reward[i], self.next_state[i], mask))
+                    if mask: dones[i] = mask
             self.state = self.next_state
             self.global_step_number += 1
-            _done = (np.any(self.done) if self.is_vec_env else self.done)
+            _done = (np.all(dones) if self.is_vec_env else self.done)
         if not self.is_vec_env: self.environment.save_experience(self.config.log_path)
         else:
             for i in range(self.environment.num_envs): self.environment.envs[i].save_experience(self.config.log_path)
@@ -116,6 +117,8 @@ class SAC(Base_Agent):
             self.print_summary_of_latest_evaluation_episode()
             # self.environment.switch_mode("train")
         self.episode_number += 1
+        sys.stdout.flush()
+
 
     def pick_action(self, eval_ep, state=None):
         """Picks an action using one of three methods: 1) Randomly if we haven't passed a certain number of steps,
@@ -124,12 +127,19 @@ class SAC(Base_Agent):
         if state is None: state = self.state
         if eval_ep: action = self.actor_pick_action(state=state, eval=True)
         elif self.global_step_number < self.hyperparameters["min_steps_before_learning"]:
-            cost_improve_vec = np.array([(i, c) for i, c in enumerate(state[:1+max_num_route]) if c > 0.0])
-            cost_sum = np.sum([c[1] for c in cost_improve_vec])
-            if cost_sum > 0.0: node_prob = [c[1]/cost_sum for c in cost_improve_vec]
-            else: node_prob = None
-            action = np.random.choice([c[0] for c in cost_improve_vec], p=node_prob)
-            # action = self.environment.action_space.sample()
+            if len(state.shape) == 1:
+                state = state.unsqueeze(0)
+            action = []
+            for i in range(state.shape[0]):
+                _state = state[i, :]
+                cost_improve_vec = np.array([(i, c) for i, c in enumerate(_state[:1+max_num_route]) if c > 0.0])
+                cost_sum = np.sum([c[1] for c in cost_improve_vec])
+                if cost_sum > 0.0: node_prob = [c[1]/cost_sum for c in cost_improve_vec]
+                else: node_prob = None
+                _action = np.random.choice([c[0] for c in cost_improve_vec], p=node_prob)
+                action.append(_action)
+                # action = self.environment.action_space.sample()
+            action = np.array(action)
             print("Picking random action ", action)
         else: action = self.actor_pick_action(state=state)
         if self.add_extra_noise:
@@ -141,14 +151,14 @@ class SAC(Base_Agent):
         an action that has partly been randomly sampled 2) If eval = True then we pick the action that comes directly
         from the network and so did not involve any random sampling"""
         if state is None: state = self.state
-        state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
+        state = torch.FloatTensor(state).to(self.device)
         if len(state.shape) == 1: state = state.unsqueeze(0)
         if eval == False: action, _, _ = self.produce_action_and_action_info(state)
         else:
             with torch.no_grad():
                 _, z, action = self.produce_action_and_action_info(state)
         action = action.detach().cpu().numpy()
-        return action[0]
+        return action
 
     def produce_action_and_action_info(self, state):
         """Given the state, produces an action, the log probability of the action, and the tanh of the mean action"""
@@ -262,7 +272,7 @@ class SAC(Base_Agent):
                 state = self.eval_environment.reset(local_agent_idx=i, relative_start_day=self.eval_environment.episode_duration_training)
                 done = False
                 while not done:
-                    action = self.actor_pick_action(state=state, eval=True)
+                    action = self.actor_pick_action(state=state, eval=True)[0]
                     state, reward, done, _ = self.eval_environment.step(action)
                     total_reward += reward
                 self.eval_environment.local_env.tracker.render_sku(self.config.log_path, [self.eval_environment.sku_name])
@@ -277,7 +287,7 @@ class SAC(Base_Agent):
             states = self.eval_environment.joint_reset(relative_start_day=self.eval_environment.episode_duration_training)
             done = False
             while not done:
-                actions = np.array([self.actor_pick_action(state=state, eval=True)[0] for state in states])
+                actions = self.actor_pick_action(state=states, eval=True)
                 states, rewards, dones, _ = self.eval_environment.joint_step(actions)
                 total_reward += np.sum(rewards)
                 done = dones[0]
@@ -294,7 +304,7 @@ class SAC(Base_Agent):
         i = 0
         while not done:
             i += 1
-            actions = np.array([self.actor_pick_action(state=state, eval=True)[0] for state in states])
+            actions = self.actor_pick_action(state=states, eval=True)
             states, _, dones, _ = self.environment.joint_step(actions)
             done = dones[0]
             self.environment.stock_trajectory[:, 0, i] = self.environment.joint_env.in_stocks_end_day[:]

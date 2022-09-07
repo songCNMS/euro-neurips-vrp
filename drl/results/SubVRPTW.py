@@ -57,16 +57,27 @@ if __name__ == "__main__":
         config.output_dir = "./logs/"
     
     # wrappable_env = SubVRPTW_Environment(args.instance, config.data_dir, seed=random.randint(0, 100))
-    N_ENVS = 4
+    N_ENVS = 10
     vec_env = make_vec_env(
         lambda: SubVRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep),
         n_envs=N_ENVS,
         vec_env_cls=DummyVecEnv
     )
     vec_env.seed(config.seed+1)
+    
+    N_EVAL_ENVS = 10
+    vec_eval_env = make_vec_env(
+        lambda: SubVRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep),
+        n_envs=N_EVAL_ENVS,
+        vec_env_cls=DummyVecEnv
+    )
+    vec_eval_env.seed(config.seed+7)
+    
     config.environment = vec_env
+    config.eval_environment = vec_eval_env
+    
     # config.environment = SubVRPTW_Environment(args.instance, config.data_dir, save_data=args.save_ep, seed=config.seed)
-    config.eval_environment = SubVRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
+    # config.eval_environment = SubVRPTW_Environment(args.instance, config.data_dir, seed=config.seed)
     config.log_path = config.output_dir
     config.file_to_save_data_results = f"{config.log_path}/VRPTW.pkl"
     config.file_to_save_results_graph = f"{config.log_path}/VRPTW.png"
@@ -206,7 +217,6 @@ if __name__ == "__main__":
     trainer = Trainer(config, AGENTS)
     if not args.eval:
         trainer.run_games_for_agents()
-        vec_env.close()
     else:
         agent_config = copy.deepcopy(config)
         if config.randomise_random_seed: agent_config.seed = random.randint(0, 2**32 - 2)
@@ -241,4 +251,6 @@ if __name__ == "__main__":
                 print("----------------------------")
             time.sleep(360)
 
-
+    vec_env.close()
+    vec_eval_env.close()
+    

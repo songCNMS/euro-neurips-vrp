@@ -13,6 +13,7 @@ from gym import spaces
 from gym.utils import seeding
 from sknetwork.embedding import Spectral
 import _pickle as cPickle
+import traceback
 
 import tools
 from cvrptw_utility import *
@@ -62,7 +63,7 @@ def compute_route_cost(routes, problem, sub_problem):
 
 class SubVRPTW_Environment(gym.Env):
     environment_name = "VRPTW Environment"
-    num_nodes_to_sample = 12
+    num_nodes_to_sample = 24
 
     def __init__(self, instance, data_dir, save_data=False, seed=1):
         self.rng = np.random.default_rng(seed)
@@ -82,7 +83,7 @@ class SubVRPTW_Environment(gym.Env):
             low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
         self.action_space = spaces.Discrete(1+max_num_route)
-        self.reset()
+        # self.reset()
 
     def seed(self, s):
         self.rd_seed = s
@@ -145,6 +146,7 @@ class SubVRPTW_Environment(gym.Env):
         self.load_problem(problem_file, routes, ruin_nodes)
         self.cur_step = 0
         self.state = self.get_state()
+        self.done = False
         if self.save_data: self.local_experience_buffer = [np.copy(self.state)]
         return self.state
     
@@ -181,6 +183,7 @@ class SubVRPTW_Environment(gym.Env):
         return state
 
     def step(self, action):
+        if self.done: return self.state, self.reward, self.done, {}
         route_idx = int(action)
         self.cur_step += 1
         if route_idx == max_num_route:

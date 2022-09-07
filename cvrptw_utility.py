@@ -12,9 +12,9 @@ import sys
 import lkh
 
 
-route_output_dim = 128
-max_num_route = 4
-max_num_nodes = 64
+route_output_dim = 64
+max_num_route = 3
+max_num_nodes = 48
 max_num_nodes_per_route = 16
 node_embedding_dim = 32
 depot = 0
