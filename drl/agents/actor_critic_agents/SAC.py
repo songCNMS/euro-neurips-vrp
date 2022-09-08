@@ -105,7 +105,7 @@ class SAC(Base_Agent):
                 for i in range(self.environment.num_envs):
                     mask = True if self.episode_step_number_val >= self.environment.envs[i].max_episode_steps else self.done[i]
                     if (not eval_ep) and (not dones[i]): self.save_experience(experience=(self.state[i], self.action[i], self.reward[i], self.next_state[i], mask))
-                    if mask: dones[i] = mask
+                    if mask: dones[i] = True
             self.state = self.next_state
             self.global_step_number += 1
             _done = (np.all(dones) if self.is_vec_env else self.done)
