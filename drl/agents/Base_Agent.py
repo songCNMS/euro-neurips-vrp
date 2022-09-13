@@ -203,9 +203,20 @@ class Base_Agent(object):
 
     def conduct_action(self, action):
         """Conducts an action in the environment"""
-        self.next_state, self.reward, self.done, _ = self.environment.step(action)
-        if self.is_vec_env: self.total_episode_score_so_far += np.mean(self.reward)
-        else: self.total_episode_score_so_far += self.reward
+        if not self.is_vec_env:
+            self.next_state, self.reward, self.done, _ = self.environment.step(action)
+            self.total_episode_score_so_far += self.reward
+        else:
+            self.next_state, self.reward, self.done = [], [], []
+            for i, act in enumerate(action):
+                env = self.environment.envs[i]
+                if env.done: _state, _reward, _done = env.state, env.reward, env.done 
+                else: _state, _reward, _done, _ = env.step(act)
+                self.next_state.append(_state)
+                self.reward.append(_reward)
+                self.done.append(_done)
+            self.next_state = np.array(self.next_state)
+            self.total_episode_score_so_far += np.mean(self.reward)
         if self.hyperparameters["clip_rewards"]:
             if self.is_vec_env: self.reward =  np.array([max(min(r, 1.0), -1.0) for r in self.reward])
             else: self.reward =  max(min(self.reward, 1.0), -1.0)
