@@ -138,30 +138,29 @@ class SAC_Discrete(SAC):
     def multi_step_opt(self, problem, problem_idx):
         base_env = self.eval_environment.envs[0]
         cur_routes = base_env.ori_full_routes
-        ori_total_cost = tools.compute_solution_driving_time(base_env.problem, cur_routes)
-        self.environment.envs
-        for _step in range(100):
+        ori_total_cost = new_total_cost = tools.compute_solution_driving_time(base_env.problem, cur_routes)
+        for _step in range(500):
             states = [self.eval_environment.envs[j].reset(problem_file=problem, routes=cur_routes) for j in range(self.eval_environment.num_envs)]
             done = False
             all_dones = [False]*self.eval_environment.num_envs
+            local_step = 0
             while not done:
+                local_step += 1
                 actions = self.actor_pick_action(state=states, eval=True)
-                states, rewards, dones = [], [], []
+                states = []
                 for i, action in enumerate(actions):
                     env = self.eval_environment.envs[i]
-                    if all_dones[i]: state, reward, done = env.state, env.reward, env.done
-                    else: state, reward, done, _ = env.step(action)
-                    states.append(state)
-                    rewards.append(reward)
-                    dones.append(done) 
-                    if done: all_dones[i] = True
-                # print(f"opt step: {_step}, idx: {problem_idx}, problem: {base_env.problem_name}, cur_step: {base_env.cur_step}, {base_env.max_episode_steps}, action: {actions}, reward: {rewards} \n ")
+                    if all_dones[i]: _state, _, _done = env.state, env.reward, env.done
+                    else: _state, _, _done, _ = env.step(action)
+                    states.append(_state)
+                    if _done: all_dones[i] = True
+                # print(f"iteration: {_step}, step: {local_step}, idx: {problem_idx}, problem: {base_env.problem_name}, cur_step: {base_env.cur_step}, {base_env.max_episode_steps}, action: {actions} \n ")
                 done = np.all(all_dones)
-            cur_final_costs = [self.eval_environment.envs[j].get_route_cost() for j in range(self.eval_environment.num_envs)]
-            cur_final_cost_idx = np.argmin(cur_final_costs)
-            cur_final_cost = cur_final_costs[cur_final_cost_idx]
-            init_cost = self.eval_environment.envs[cur_final_cost_idx].init_total_cost
-            if cur_final_cost < init_cost:
+            cost_reductions = [self.eval_environment.envs[j].init_total_cost-self.eval_environment.envs[j].get_route_cost() for j in range(self.eval_environment.num_envs)]
+            cur_final_cost_idx = np.argmax(cost_reductions)
+            print(_step, cost_reductions)
+            max_cost_reduction = cost_reductions[cur_final_cost_idx]
+            if max_cost_reduction > 0:
                 opt_env = self.eval_environment.envs[cur_final_cost_idx]
                 start_idxs, end_idxs = opt_env.sub_problem["start_idxs"], opt_env.sub_problem["end_idxs"]
                 ori_route_idxs = opt_env.sub_problem["ori_route_idxs"]
@@ -171,7 +170,7 @@ class SAC_Discrete(SAC):
                     route = cur_routes[ori_route_idx][:]
                     cur_routes[ori_route_idx] = route[:start_idx] + sub_route + route[end_idx:]
                 cur_routes = [_route for _route in cur_routes if len(_route) > 0]                   
-        new_total_cost = tools.validate_static_solution(base_env.problem, cur_routes)
+                new_total_cost = tools.validate_static_solution(opt_env.problem, cur_routes)
         return ori_total_cost, new_total_cost
             
     def eval(self):
@@ -212,19 +211,18 @@ class SAC_Discrete(SAC):
                     rewards.append(reward)
                     dones.append(done) 
                     if done: all_dones[j] = True
-                print(
-                    f"problem: {self.eval_environment.envs[0].problem_name}, cur_step: {self.eval_environment.envs[0].cur_step}, {self.eval_environment.envs[0].max_episode_steps}, action: {actions}, reward: {rewards} \n ")
+                # print(
+                #     f"problem: {self.eval_environment.envs[0].problem_name}, cur_step: {self.eval_environment.envs[0].cur_step}, {self.eval_environment.envs[0].max_episode_steps}, action: {actions}, reward: {rewards} \n ")
                 _total_reward += np.sum(rewards)
                 done = np.all(all_dones)
             problem_reward_list.append(_total_reward)
             total_reward += _total_reward
-            cur_final_costs = [self.eval_environment.envs[j].get_route_cost() for j in range(self.eval_environment.num_envs)]
-            cur_final_cost_idx = np.argmin(cur_final_costs)
-            cur_final_cost = cur_final_costs[cur_final_cost_idx]
-            final_cost += cur_final_cost
+            cost_reductions = [self.eval_environment.envs[j].init_total_cost-self.eval_environment.envs[j].get_route_cost() for j in range(self.eval_environment.num_envs)]
+            cur_final_cost_idx = np.argmax(cost_reductions)
+            cost_reduction = cost_reductions[cur_final_cost_idx]
             for env in self.eval_environment.envs:
                 if len(env.order_to_dispatch) == 0: succeed_instances += 1
-            if cur_final_cost < self.eval_environment.envs[0].init_total_cost: rl_better_instances += 1
+            if cost_reduction > 0: rl_better_instances += 1
             _init_full_cost, _final_full_cost = self.multi_step_opt(problem, i)
             init_full_cost += _init_full_cost
             final_full_cost += _final_full_cost

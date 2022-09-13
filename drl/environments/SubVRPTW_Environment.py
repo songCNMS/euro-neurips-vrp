@@ -105,7 +105,11 @@ class SubVRPTW_Environment(gym.Env):
         duration_matrix = self.problem["duration_matrix"]
         spectral = Spectral(n_components=node_embedding_dim)
         self.node_embeddings = {}
-        node_embeddings_array = spectral.fit_transform(duration_matrix)
+        ne_file_name = f"{self.data_dir}/cvrp_benchmarks/RL_train_data/{self.problem_name}_ne.npy"
+        if os.path.exists(ne_file_name): node_embeddings_array = np.load(ne_file_name, allow_pickle=True)
+        else:
+            node_embeddings_array = spectral.fit_transform(duration_matrix)
+            np.save(ne_file_name, node_embeddings_array)
         for i, c in enumerate(self.all_customers): self.node_embeddings[c] = node_embeddings_array[i, :]
         if routes is None:
             solution_file_name = f"{self.data_dir}/cvrp_benchmarks/RL_train_data/{self.problem_name}.npy"
@@ -131,6 +135,7 @@ class SubVRPTW_Environment(gym.Env):
         self.sub_routes = [[] for _ in range(len(self.sub_problem["ori_routes"]))]
         self.order_to_dispatch = []
         for route in self.sub_problem["ori_routes"]: self.order_to_dispatch.extend(route)
+        # print("order to dispatch: ", self.order_to_dispatch)
         depots = self.sub_problem["ori_starts"] + self.sub_problem["ori_stops"]
         self.reward_norm = np.max([self.problem["duration_matrix"][c1, c2] for c1 in depots+self.order_to_dispatch for c2 in depots+self.order_to_dispatch])
         self.init_total_cost = compute_route_cost(self.sub_problem["ori_routes"], self.problem, self.sub_problem)
