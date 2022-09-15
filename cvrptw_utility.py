@@ -44,7 +44,7 @@ def get_lastest_arrival_time(route, start_idx, instance):
     dist = instance["duration_matrix"]
     service_t = instance["service_times"]
     _, latest_arrival_depot = timew[depot]
-    current_time = latest_arrival_depot-service_t[depot]
+    current_time = latest_arrival_depot
     next_stop = depot
     for i in range(len(route)-1, start_idx-1, -1):
         stop = route[i]

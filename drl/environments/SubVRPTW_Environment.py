@@ -140,6 +140,7 @@ class SubVRPTW_Environment(gym.Env):
         self.reward_norm = np.max([self.problem["duration_matrix"][c1, c2] for c1 in depots+self.order_to_dispatch for c2 in depots+self.order_to_dispatch])
         self.init_total_cost = compute_route_cost(self.sub_problem["ori_routes"], self.problem, self.sub_problem)
         self.ori_full_routes = routes
+        self.dead_end = False
 
     def get_route_cost(self):
         if len(self.order_to_dispatch) > 0:
@@ -172,7 +173,9 @@ class SubVRPTW_Environment(gym.Env):
                 min_pos, min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
                 if min_pos is not None: cost_vec[route_idx] = 1.0+(self.reward_norm - min_cost) / self.reward_norm
         if self.cur_step < self._max_episode_steps - max_num_nodes: cost_vec[-1] = 1.0
-        if np.sum(cost_vec) == 0.0:  cost_vec[-1] = 1.0
+        if np.sum(cost_vec) == 0.0: 
+            self.dead_end = True
+            cost_vec[-1] = 1.0
         cur_routes_encode_state = np.zeros((max_num_route, max_num_nodes_per_route*feature_dim))
         for i, route in enumerate(self.sub_routes):
             if i >= max_num_route: break
@@ -202,7 +205,7 @@ class SubVRPTW_Environment(gym.Env):
             self.reward = (self.reward_norm-min_cost)/self.reward_norm
             self.sub_routes[route_idx] = route[:min_pos] + [cur_order] + route[min_pos:]
         self.state = self.get_state()
-        self.done = ((self.cur_step >= self._max_episode_steps) | (len(self.order_to_dispatch) <= 0))
+        self.done = ((self.cur_step >= self._max_episode_steps) | (len(self.order_to_dispatch) <= 0) | self.dead_end)
         # if self.done and len(self.order_to_dispatch) > 0: self.reward = -10*len(self.order_to_dispatch)
         if self.save_data: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
         return self.state, self.reward, self.done, {}
