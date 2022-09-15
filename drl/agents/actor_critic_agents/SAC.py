@@ -131,12 +131,7 @@ class SAC(Base_Agent):
                 state = state.unsqueeze(0)
             action = []
             for i in range(state.shape[0]):
-                _state = state[i, :]
-                cost_improve_vec = np.array([(i, c) for i, c in enumerate(_state[:1+max_num_route]) if c > 0.0])
-                cost_sum = np.sum([c[1] for c in cost_improve_vec])
-                if cost_sum > 0.0: node_prob = [c[1]/cost_sum for c in cost_improve_vec]
-                else: node_prob = None
-                _action = np.random.choice([c[0] for c in cost_improve_vec], p=node_prob)
+                _action = np.random.randint(max(1, int(state[i, 0])))
                 action.append(_action)
                 # action = self.environment.action_space.sample()
             action = np.array(action)

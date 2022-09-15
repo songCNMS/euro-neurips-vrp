@@ -13,6 +13,7 @@ import os
 import random
 torch.autograd.set_detect_anomaly(False)
 import tools
+import time
 
 
 class SAC_Discrete(SAC):
@@ -139,11 +140,13 @@ class SAC_Discrete(SAC):
         base_env = self.eval_environment.envs[0]
         cur_routes = base_env.ori_full_routes
         ori_total_cost = new_total_cost = tools.compute_solution_driving_time(base_env.problem, cur_routes)
-        for _step in range(500):
+        for _step in range(100):
             states = [self.eval_environment.envs[j].reset(problem_file=problem, routes=cur_routes) for j in range(self.eval_environment.num_envs)]
             done = False
             all_dones = [False]*self.eval_environment.num_envs
             local_step = 0
+            prev_time = time.time()
+            env_steps = [0]*self.eval_environment.num_envs
             while not done:
                 local_step += 1
                 actions = self.actor_pick_action(state=states, eval=True)
@@ -151,17 +154,20 @@ class SAC_Discrete(SAC):
                 for i, action in enumerate(actions):
                     env = self.eval_environment.envs[i]
                     if all_dones[i]: _state, _, _done = env.state, env.reward, env.done
-                    else: _state, _, _done, _ = env.step(action)
+                    else: 
+                        _state, _, _done, _ = env.step(action)
+                        env_steps[i] =  env.cur_step
                     states.append(_state)
                     if _done: all_dones[i] = True
-                # print(f"iteration: {_step}, step: {local_step}, idx: {problem_idx}, problem: {base_env.problem_name}, cur_step: {base_env.cur_step}, {base_env.max_episode_steps}, action: {actions} \n ")
+                print(f"iteration: {_step}, step: {local_step}, idx: {problem_idx}, problem: {base_env.problem_name}, cur_step: {env_steps}, {base_env.max_episode_steps}, action: {actions} \n ")
                 done = np.all(all_dones)
             cost_reductions = [self.eval_environment.envs[j].init_total_cost-self.eval_environment.envs[j].get_route_cost() for j in range(self.eval_environment.num_envs)]
             cur_final_cost_idx = np.argmax(cost_reductions)
-            print(_step, cost_reductions)
+            print(time.time()-prev_time, _step, cost_reductions)
             max_cost_reduction = cost_reductions[cur_final_cost_idx]
+            opt_env = self.eval_environment.envs[cur_final_cost_idx]
+            print(opt_env.sub_problem["ori_routes"], opt_env.sub_routes)
             if max_cost_reduction > 0:
-                opt_env = self.eval_environment.envs[cur_final_cost_idx]
                 start_idxs, end_idxs = opt_env.sub_problem["start_idxs"], opt_env.sub_problem["end_idxs"]
                 ori_route_idxs = opt_env.sub_problem["ori_route_idxs"]
                 for route_idx, sub_route in enumerate(opt_env.sub_routes):
@@ -186,7 +192,7 @@ class SAC_Discrete(SAC):
         # problem_list = [p for p in problem_list if (p.split('_')[0] in ["R1", "C1", "RC1"])]
         # problem_list = [p for p in problem_list if int(p.split('-')[-2][1:]) ]
         # problem_list = ["ORTEC-VRPTW-ASYM-55a26fb1-d1-n326-k25.txt"]
-        eval_rounds = min(10, len(problem_list))
+        eval_rounds = min(5, len(problem_list))
         succeed_instances = 0
         rl_better_instances = 0
         init_cost, final_cost, hybrid_cost = 0.0, 0.0, 0.0

@@ -78,11 +78,11 @@ class SubVRPTW_Environment(gym.Env):
         self.trials = 10
         self.reward_threshold = float("inf")
         self.id = "SubVRPTW"
-        self.num_states = 1+max_num_route+max_num_route*max_num_nodes_per_route*feature_dim+max_num_nodes*feature_dim
+        self.num_states = 1+max_num_route*max_num_nodes_per_route*feature_dim+max_num_nodes*feature_dim
         self.observation_space = spaces.Box(
             low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
-        self.action_space = spaces.Discrete(1+max_num_route)
+        self.action_space = spaces.Discrete(max_num_nodes)
         # self.reset()
 
     def seed(self, s):
@@ -140,6 +140,7 @@ class SubVRPTW_Environment(gym.Env):
         self.reward_norm = np.max([self.problem["duration_matrix"][c1, c2] for c1 in depots+self.order_to_dispatch for c2 in depots+self.order_to_dispatch])
         self.init_total_cost = compute_route_cost(self.sub_problem["ori_routes"], self.problem, self.sub_problem)
         self.ori_full_routes = routes
+        self.dead_end = False
 
     def get_route_cost(self):
         if len(self.order_to_dispatch) > 0:
@@ -157,53 +158,50 @@ class SubVRPTW_Environment(gym.Env):
     
     def get_route_state(self, route_idx, route):
         route_state = np.zeros(max_num_nodes_per_route*feature_dim)
-        start, end = self.sub_problem["ori_starts"][route_idx], self.sub_problem["ori_stops"][route_idx]
-        for i, c in enumerate([start]+route+[end]): 
+        start_depot, end_depot = self.sub_problem["ori_starts"][route_idx], self.sub_problem["ori_stops"][route_idx]
+        for i, c in enumerate([start_depot]+route+[end_depot]): 
             if i + 1 >= max_num_nodes_per_route: break
             route_state[i*feature_dim:(i+1)*feature_dim] = \
                 extract_features_for_nodes(c, True, self.problem, self.sub_problem, self.node_embeddings)
         return route_state
             
     def get_state(self):
-        cost_vec = np.zeros(max_num_route+1)
-        if len(self.order_to_dispatch) > 0:
-            cur_order = self.order_to_dispatch[0]
-            for route_idx, route in enumerate(self.sub_routes):
-                min_pos, min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
-                if min_pos is not None: cost_vec[route_idx] = 1.0+(self.reward_norm - min_cost) / self.reward_norm
-        if self.cur_step < self._max_episode_steps - max_num_nodes: cost_vec[-1] = 1.0
-        if np.sum(cost_vec) == 0.0:  cost_vec[-1] = 1.0
         cur_routes_encode_state = np.zeros((max_num_route, max_num_nodes_per_route*feature_dim))
         for i, route in enumerate(self.sub_routes):
             if i >= max_num_route: break
             cur_routes_encode_state[i, :] = self.get_route_state(i, route)
         route_state = cur_routes_encode_state.reshape(-1)
-        state = np.concatenate((cost_vec, route_state), axis=0)
         orders_to_dispatch_state = np.zeros((max_num_nodes,feature_dim))
         for i, order in enumerate(self.order_to_dispatch):
             if i >= max_num_nodes: break
             orders_to_dispatch_state[i, :] = extract_features_for_nodes(order, False, self.problem, self.sub_problem, self.node_embeddings)
         orders_to_dispatch_state = orders_to_dispatch_state.reshape(-1)
-        state = np.concatenate((state, orders_to_dispatch_state), axis=0)
+        state = np.concatenate((np.array([len(self.order_to_dispatch)]), route_state, orders_to_dispatch_state), axis=0)
         return state
 
     def step(self, action):
         if self.done: return self.state, self.reward, self.done, {}
-        route_idx = int(action)
+        order_idx = int(action)
         self.cur_step += 1
-        if route_idx == max_num_route:
-            if len(self.order_to_dispatch) > 0: self.order_to_dispatch = self.order_to_dispatch[1:] + [self.order_to_dispatch[0]]
-            self.reward = 0.0
-        else:
-            cur_order = self.order_to_dispatch[0]
-            self.order_to_dispatch = self.order_to_dispatch[1:]
-            route = self.sub_routes[route_idx]
-            min_pos, min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
-            self.reward = (self.reward_norm-min_cost)/self.reward_norm
-            self.sub_routes[route_idx] = route[:min_pos] + [cur_order] + route[min_pos:]
+        self.reward = 0
+        if order_idx < len(self.order_to_dispatch):
+            cur_order = self.order_to_dispatch[order_idx]
+            min_cost, min_pos, min_route_idx = float("inf"), None, None
+            for route_idx, route in enumerate(self.sub_routes):
+                _min_pos, _min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
+                if (_min_pos is not None) and _min_cost < min_cost:
+                    min_cost = _min_cost 
+                    min_pos = _min_pos
+                    min_route_idx = route_idx
+            if min_route_idx is None: self.dead_end = True
+            else:
+                self.order_to_dispatch = self.order_to_dispatch[:order_idx] + self.order_to_dispatch[order_idx+1:]
+                route = self.sub_routes[min_route_idx]
+                self.reward = (self.reward_norm-min_cost)/self.reward_norm
+                self.sub_routes[min_route_idx] = route[:min_pos] + [cur_order] + route[min_pos:]
         self.state = self.get_state()
-        self.done = ((self.cur_step >= self._max_episode_steps) | (len(self.order_to_dispatch) <= 0))
-        # if self.done and len(self.order_to_dispatch) > 0: self.reward = -10*len(self.order_to_dispatch)
+        self.done = ((self.cur_step >= self._max_episode_steps) | (len(self.order_to_dispatch) <= 0) | self.dead_end)
+        # if self.done: self.reward = -len(self.order_to_dispatch)
         if self.save_data: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
         return self.state, self.reward, self.done, {}
 
@@ -218,13 +216,3 @@ class SubVRPTW_Environment(gym.Env):
             with open(f, "wb") as output_file:
                 cPickle.dump(self.local_experience_buffer, output_file)
     
-
-import argparse
-import os
-parser = argparse.ArgumentParser(description='Input of VRPTW Trainer')
-if __name__ == "__main__":
-    parser.add_argument('--instance', type=str, default="ortec")
-    parser.add_argument("--remote", action="store_true")
-    parser.add_argument("--mp", type=int, default=1)
-    args = parser.parse_args()
-    pass
