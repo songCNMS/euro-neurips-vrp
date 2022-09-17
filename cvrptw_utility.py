@@ -13,8 +13,9 @@ import lkh
 
 
 route_output_dim = 64
-max_num_route = 6
-max_num_nodes = 96
+customer_emb_dim = 64
+max_num_route = 4
+max_num_nodes = 64
 max_num_nodes_per_route = 16
 node_embedding_dim = 32
 depot = 0
@@ -80,8 +81,14 @@ def extract_features_for_nodes(node, is_on_route, problem, sub_problem, node_emb
     node_feature[1] = (1 if node in sub_problem["ori_stops"] else 0)
     node_feature[2] = (1 if is_on_route else 0)
     node_feature[3] = problem["service_times"][node] / max_duration
-    node_feature[4] = (problem["time_windows"][node, 0] - earliest_start_time) / max_duration
-    node_feature[5] = (problem["time_windows"][node, 1] - earliest_start_time) / max_duration
+    if node in sub_problem["ori_starts"]:
+        route_idx = sub_problem["ori_starts"].index(node)
+        node_feature[4] = (sub_problem['start_times'][route_idx] - earliest_start_time) / max_duration
+    else: node_feature[4] = (problem["time_windows"][node, 0] - earliest_start_time) / max_duration
+    if node in sub_problem["ori_stops"]:
+        route_idx = sub_problem["ori_stops"].index(node)
+        node_feature[5] = (sub_problem['stop_times'][route_idx] - earliest_start_time) / max_duration
+    else: node_feature[5] = (problem["time_windows"][node, 1] - earliest_start_time) / max_duration
     node_feature[6] = problem["demands"][node] / problem["capacity"]
     node_feature[7:] = node_embeddings[node]
     return node_feature
@@ -395,7 +402,7 @@ else: device = "cpu"
 class Customer_Model(torch.nn.Module):
     def __init__(self):
         super(Customer_Model, self).__init__()
-        self.output_dim = 32
+        self.output_dim = customer_emb_dim
         self.mlp = NN(input_dim=feature_dim, 
                      layers_info=[64, self.output_dim],
                      output_activation="tanh",
@@ -447,9 +454,9 @@ class MLP_RL_Model(torch.nn.Module):
         else: self.final_layer = torch.nn.Softmax(dim=1)
         self.exploration_rate = 1.0
         self.rate_delta = 0.01
-        input_dim = route_output_dim*3 #+self.route_model.customer_model.output_dim*3
+        input_dim = (1+max_num_nodes)*feature_dim
         self.mlp = NN(input_dim=input_dim, 
-                      layers_info=hyperparameters["linear_hidden_units"] + [self.route_model.customer_model.output_dim],
+                      layers_info=hyperparameters["linear_hidden_units"] + [2*max_num_nodes],
                       output_activation=None,
                       batch_norm=hyperparameters["batch_norm"], dropout=hyperparameters["dropout"],
                       hidden_activations=hyperparameters["hidden_activations"], initialiser=hyperparameters["initialiser"],
@@ -460,42 +467,23 @@ class MLP_RL_Model(torch.nn.Module):
     def forward(self, state):
         num_samples = state.size(0)
         order_nums = state[:, 0]
-        order_mask = torch.ones(num_samples, max_num_nodes).to(state.device)
+        order_mask = torch.ones(num_samples, 2*max_num_nodes).to(state.device)
         for i in range(num_samples):
             order_num = max(1, int(order_nums[i]))
-            order_mask[i, order_num:] = 0.0
-            
-        route_states = state[:, 1:1+max_num_route*max_num_nodes_per_route*feature_dim].reshape(num_samples, max_num_route, max_num_nodes_per_route*feature_dim)
-        route_rnn_output_list = []
-        for i in range(max_num_route):
-            x_r = route_states[:, i, :]
-            if self.mlp_route: x_r = self.route_model(x_r)
-            else:
-                x_r, _ = self.route_model(x_r)
-                x_r = x_r[-1, :, :]
-            route_rnn_output_list.append(x_r)
-        x_r_mean = torch.stack(route_rnn_output_list, dim=1).mean(axis=1)
-        x_r_max, _ = torch.stack(route_rnn_output_list, dim=1).max(axis=1)
-        x_r_min, _ = torch.stack(route_rnn_output_list, dim=1).min(axis=1)
-        x = torch.cat((x_r_mean, x_r_max, x_r_min), axis=1)
-        x = self.mlp(x)
-        orders_states = state[:, -max_num_nodes*feature_dim:].reshape(num_samples, max_num_nodes, feature_dim)
-        # order_emb_output_list = []
-        x_out_list = []
-        for i in range(max_num_nodes):
-            # order_emb_output_list.append(self.route_model.customer_model(orders_states[:, i, :]))
-            order_out = self.route_model.customer_model(orders_states[:, i, :])
-            out = torch.mul(x, order_out).mean(axis=1)
-            x_out_list.append(out)
-        x = torch.stack(x_out_list, axis=1)
-        # x_o_mean = torch.stack(order_emb_output_list, dim=1).mean(axis=1)
-        # x_o_max, _ = torch.stack(order_emb_output_list, dim=1).max(axis=1)
-        # x_o_min, _ = torch.stack(order_emb_output_list, dim=1).min(axis=1)
-        # x = torch.cat((x, x_o_mean, x_o_max, x_o_min), axis=1)
-        # x = self.mlp(x)
+            order_mask[i, order_num:max_num_nodes] = 0.0
+            order_mask[i, order_num+max_num_nodes:] = 0.0
+        
+        # route_states = state[:, 1:1+max_num_nodes_per_route*feature_dim].reshape(num_samples, max_num_nodes_per_route*feature_dim)
+        # if self.mlp_route: x_r = self.route_model(route_states)
+        # else:
+        #     x_r, _ = self.route_model(route_states)
+        #     x_r = x_r[-1, :, :]
+        # x = x_r
+        order_features = state[:, 1:]
+        x = self.mlp(order_features)
         x = self.final_layer(x)
         if self.key_to_use != 'Actor': x = torch.mul(x, 100.0)
-        x = torch.add(x, 1e-3)
+        x = torch.add(x, 1e-5)
         x = torch.mul(x, order_mask)
         return x
     

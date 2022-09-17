@@ -50,15 +50,33 @@ def greedy_insertion(route, route_idx, node, problem, sub_problem):
                 min_pos, min_cost = i, dist
     return min_pos, min_cost
 
-def compute_route_cost(routes, problem, sub_problem):
+def insert_to_end(route, route_idx, node, problem, sub_problem):
+    start_depot = sub_problem["ori_starts"][route_idx]
+    stop_depot = sub_problem["ori_stops"][route_idx]
+    new_route = route + [node]
+    prev_node = (start_depot if len(route) == 0 else route[-1])
+    next_node = stop_depot
+    cost = None
+    if check_route_validity(new_route, route_idx, problem, sub_problem):
+        cost = (-problem["duration_matrix"][prev_node, next_node]
+                    + problem["duration_matrix"][prev_node, node]
+                    + problem["duration_matrix"][node, next_node])
+    return cost
+
+
+def compute_single_route_cost(route, route_idx, problem, sub_problem):
     start_depots = sub_problem["ori_starts"]
     stop_depots = sub_problem["ori_stops"]
     duration_matrix = problem["duration_matrix"]
+    full_route = [start_depots[route_idx]] + route + [stop_depots[route_idx]]
+    total_cost = duration_matrix[full_route[:-1], full_route[1:]].sum()
+    return total_cost
+
+
+def compute_route_cost(routes, problem, sub_problem):
     total_cost = 0.0
     for route_idx, route in enumerate(routes):
-        route = [start_depots[route_idx]] + \
-            routes[route_idx] + [stop_depots[route_idx]]
-        total_cost += duration_matrix[route[:-1], route[1:]].sum()
+        total_cost += compute_single_route_cost(route, route_idx, problem, sub_problem)
     return total_cost
 
 class SubVRPTW_Environment(gym.Env):
@@ -72,17 +90,17 @@ class SubVRPTW_Environment(gym.Env):
         self.rd_seed = seed
         self.save_data = save_data
         self.mode = 'train'
-        self._max_episode_steps = max_num_nodes*2
+        self._max_episode_steps = max_num_nodes*10
         self.max_episode_steps = self._max_episode_steps
         self.cur_step = 0
         self.trials = 10
         self.reward_threshold = float("inf")
         self.id = "SubVRPTW"
-        self.num_states = 1+max_num_route*max_num_nodes_per_route*feature_dim+max_num_nodes*feature_dim
+        self.num_states = 1+feature_dim+max_num_nodes*feature_dim
         self.observation_space = spaces.Box(
             low=0.00, high=1.00, shape=(self.num_states, ), dtype=float
         )
-        self.action_space = spaces.Discrete(max_num_nodes)
+        self.action_space = spaces.Discrete(2*max_num_nodes)
         # self.reset()
 
     def seed(self, s):
@@ -93,7 +111,8 @@ class SubVRPTW_Environment(gym.Env):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
-            problem_file = self.rng.choice(problem_list)
+            # problem_file = self.rng.choice(problem_list)
+            problem_file = problem_list[0]
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
         print("loading problem: ", self.problem_name, self.rd_seed)
@@ -119,7 +138,7 @@ class SubVRPTW_Environment(gym.Env):
                 if os.path.exists(tmp_file_name):
                     os.rmdir(tmp_file_name)
                 os.makedirs(tmp_file_name, exist_ok=True)
-                routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=tmp_file_name, time_limit=240)
+                routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=tmp_file_name, time_limit=30)
                 np.save(solution_file_name, np.array(routes))
         if ruin_nodes is None:
             while True:
@@ -132,15 +151,15 @@ class SubVRPTW_Environment(gym.Env):
                 self.sub_problem = get_sub_instance(ruin_nodes, routes, self.problem)
                 if 0 < len(self.sub_problem["ori_routes"]) <= max_num_route: break
         else: self.sub_problem = get_sub_instance(ruin_nodes, routes, self.problem)
-        self.sub_routes = [[] for _ in range(len(self.sub_problem["ori_routes"]))]
+        self.sub_routes = [route[:] for route in self.sub_problem["ori_routes"]]
         self.order_to_dispatch = []
         for route in self.sub_problem["ori_routes"]: self.order_to_dispatch.extend(route)
-        # print("order to dispatch: ", self.order_to_dispatch)
         depots = self.sub_problem["ori_starts"] + self.sub_problem["ori_stops"]
         self.reward_norm = np.max([self.problem["duration_matrix"][c1, c2] for c1 in depots+self.order_to_dispatch for c2 in depots+self.order_to_dispatch])
         self.init_total_cost = compute_route_cost(self.sub_problem["ori_routes"], self.problem, self.sub_problem)
         self.ori_full_routes = routes
-        self.dead_end = False
+        self.cur_order_idx = 0
+        self.order_to_route_dict = {c: route_idx for route_idx, route in enumerate(self.sub_routes) for c in route}
 
     def get_route_cost(self):
         if len(self.order_to_dispatch) > 0:
@@ -166,41 +185,91 @@ class SubVRPTW_Environment(gym.Env):
         return route_state
             
     def get_state(self):
-        cur_routes_encode_state = np.zeros((max_num_route, max_num_nodes_per_route*feature_dim))
-        for i, route in enumerate(self.sub_routes):
-            if i >= max_num_route: break
-            cur_routes_encode_state[i, :] = self.get_route_state(i, route)
+        cur_routes_encode_state = np.zeros((max_num_nodes, feature_dim))
+        i = 0
+        for route_idx, route in enumerate(self.sub_routes):
+            start_depot, stop_depot = self.sub_problem["ori_starts"][route_idx], self.sub_problem["ori_stops"][route_idx]
+            for order in [start_depot] +  route + [stop_depot]:
+                if i < max_num_nodes: cur_routes_encode_state[i, :] = extract_features_for_nodes(order, True, self.problem, self.sub_problem, self.node_embeddings)
+                i += 1
         route_state = cur_routes_encode_state.reshape(-1)
-        orders_to_dispatch_state = np.zeros((max_num_nodes,feature_dim))
-        for i, order in enumerate(self.order_to_dispatch):
-            if i >= max_num_nodes: break
-            orders_to_dispatch_state[i, :] = extract_features_for_nodes(order, False, self.problem, self.sub_problem, self.node_embeddings)
-        orders_to_dispatch_state = orders_to_dispatch_state.reshape(-1)
-        state = np.concatenate((np.array([len(self.order_to_dispatch)]), route_state, orders_to_dispatch_state), axis=0)
+        order = self.order_to_dispatch[self.cur_order_idx]
+        cur_order_state = extract_features_for_nodes(order, True, self.problem, self.sub_problem, self.node_embeddings)
+        state = np.concatenate((np.array([len(self.order_to_dispatch)]), cur_order_state, route_state), axis=0)
+        # orders_to_dispatch_state = np.zeros((max_num_nodes, feature_dim))
+        # for i, order in enumerate(self.order_to_dispatch):
+        #     if i >= max_num_nodes: break
+        #     orders_to_dispatch_state[i, :] = extract_features_for_nodes(order, False, self.problem, self.sub_problem, self.node_embeddings)
+        # orders_to_dispatch_state = orders_to_dispatch_state.reshape(-1)
+        # return state
         return state
 
     def step(self, action):
         if self.done: return self.state, self.reward, self.done, {}
-        order_idx = int(action)
+        replace = (int(action) < max_num_nodes)
+        pos_idx = int(action)
+        if not replace: pos_idx -= max_num_nodes
         self.cur_step += 1
-        self.reward = 0
-        if order_idx < len(self.order_to_dispatch):
-            cur_order = self.order_to_dispatch[order_idx]
-            min_cost, min_pos, min_route_idx = float("inf"), None, None
-            for route_idx, route in enumerate(self.sub_routes):
-                _min_pos, _min_cost = greedy_insertion(route, route_idx, cur_order, self.problem, self.sub_problem)
-                if (_min_pos is not None) and _min_cost < min_cost:
-                    min_cost = _min_cost 
-                    min_pos = _min_pos
-                    min_route_idx = route_idx
-            if min_route_idx is None: self.dead_end = True
+        self.reward = 1.0
+        source_order = self.order_to_dispatch[self.cur_order_idx]
+        target_order = self.order_to_dispatch[pos_idx]
+        target_route_idx = self.order_to_route_dict[target_order]
+        source_route_idx = self.order_to_route_dict[source_order]
+        if target_order != source_order and replace:
+            if target_route_idx == source_route_idx:
+                new_route = self.sub_routes[target_route_idx][:]
+                target_order_pos = new_route.index(target_order)
+                source_order_pos = new_route.index(source_order)
+                new_route[target_order_pos], new_route[source_order_pos] = source_order, target_order
+                if check_route_validity(new_route, target_route_idx, self.problem, self.sub_problem):
+                    old_cost = compute_single_route_cost(self.sub_routes[target_route_idx], target_route_idx, self.problem, self.sub_problem)
+                    new_cost = compute_single_route_cost(new_route, target_route_idx, self.problem, self.sub_problem)
+                    self.reward = 1.0+(old_cost - new_cost) / self.reward_norm
+                    self.sub_routes[target_route_idx] = new_route
             else:
-                self.order_to_dispatch = self.order_to_dispatch[:order_idx] + self.order_to_dispatch[order_idx+1:]
-                route = self.sub_routes[min_route_idx]
-                self.reward = (self.reward_norm-min_cost)/self.reward_norm
-                self.sub_routes[min_route_idx] = route[:min_pos] + [cur_order] + route[min_pos:]
+                target_route = self.sub_routes[target_route_idx][:]
+                source_route = self.sub_routes[source_route_idx][:]
+                target_order_pos = target_route.index(target_order)
+                source_order_pos = source_route.index(source_order)
+                target_route[target_order_pos], source_route[source_order_pos] = source_order, target_order
+                if check_route_validity(target_route, target_route_idx, self.problem, self.sub_problem) and check_route_validity(source_route, source_route_idx, self.problem, self.sub_problem) :
+                    old_cost = compute_single_route_cost(self.sub_routes[target_route_idx], target_route_idx, self.problem, self.sub_problem) + compute_single_route_cost(self.sub_routes[source_route_idx], source_route_idx, self.problem, self.sub_problem)
+                    new_cost = compute_single_route_cost(target_route, target_route_idx, self.problem, self.sub_problem) + compute_single_route_cost(source_route, source_route_idx, self.problem, self.sub_problem)
+                    self.reward = 1.0+(old_cost - new_cost) / self.reward_norm
+                    self.sub_routes[target_route_idx] = target_route
+                    self.sub_routes[source_route_idx] = source_route
+                    self.order_to_route_dict[target_order] = source_route_idx
+                    self.order_to_route_dict[source_order] = target_route_idx
+        elif target_order != source_order:
+            if target_route_idx == source_route_idx:
+                new_route = self.sub_routes[target_route_idx][:]
+                target_order_pos = new_route.index(target_order)
+                source_order_pos = new_route.index(source_order)
+                new_route[source_order_pos] = None
+                new_route = new_route[:target_order_pos] + [source_order] + new_route[target_order_pos:]
+                new_route = [c for c in new_route if c is not None]
+                if check_route_validity(new_route, target_route_idx, self.problem, self.sub_problem):
+                    old_cost = compute_single_route_cost(self.sub_routes[target_route_idx], target_route_idx, self.problem, self.sub_problem)
+                    new_cost = compute_single_route_cost(new_route, target_route_idx, self.problem, self.sub_problem)
+                    self.reward = 1.0+(old_cost - new_cost) / self.reward_norm
+                    self.sub_routes[target_route_idx] = new_route
+            else:
+                target_route = self.sub_routes[target_route_idx][:]
+                source_route = self.sub_routes[source_route_idx][:]
+                target_order_pos = target_route.index(target_order)
+                source_order_pos = source_route.index(source_order)
+                target_route = target_route[:target_order_pos] + [source_order] + target_route[target_order_pos:]
+                source_route = source_route[:source_order_pos] + source_route[source_order_pos+1:]
+                if check_route_validity(target_route, target_route_idx, self.problem, self.sub_problem) and check_route_validity(source_route, source_route_idx, self.problem, self.sub_problem) :
+                    old_cost = compute_single_route_cost(self.sub_routes[target_route_idx], target_route_idx, self.problem, self.sub_problem) + compute_single_route_cost(self.sub_routes[source_route_idx], source_route_idx, self.problem, self.sub_problem)
+                    new_cost = compute_single_route_cost(target_route, target_route_idx, self.problem, self.sub_problem) + compute_single_route_cost(source_route, source_route_idx, self.problem, self.sub_problem)
+                    self.reward = 1.0+(old_cost - new_cost) / self.reward_norm
+                    self.sub_routes[target_route_idx] = target_route
+                    self.sub_routes[source_route_idx] = source_route
+                    self.order_to_route_dict[source_order] = target_route_idx
+        self.cur_order_idx = (self.cur_order_idx + 1) % len(self.order_to_dispatch)
         self.state = self.get_state()
-        self.done = ((self.cur_step >= self._max_episode_steps) | (len(self.order_to_dispatch) <= 0) | self.dead_end)
+        self.done = (self.cur_step >= self._max_episode_steps)
         # if self.done: self.reward = -len(self.order_to_dispatch)
         if self.save_data: self.local_experience_buffer.extend([action, self.reward, np.copy(self.state)])
         return self.state, self.reward, self.done, {}

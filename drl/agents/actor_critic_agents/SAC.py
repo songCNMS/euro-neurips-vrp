@@ -113,6 +113,7 @@ class SAC(Base_Agent):
         else:
             for i in range(self.environment.num_envs): self.environment.envs[i].save_experience(self.config.log_path)
         print(self.total_episode_score_so_far)
+        wandb.log({"episode_reward": self.total_episode_score_so_far})
         if eval_ep: 
             self.print_summary_of_latest_evaluation_episode()
             # self.environment.switch_mode("train")
