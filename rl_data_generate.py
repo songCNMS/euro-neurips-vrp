@@ -28,8 +28,8 @@ def get_features(problem_file, exp_round, output_dir, solo):
         problem = tools.read_vrplib(problem_file)
     
     num_customers = len(problem["demands"])
-    epoch_tlim = (5*60 if num_customers <= 300 else (10*60 if num_customers <= 500 else 15*60))
-    
+    # epoch_tlim = (5*60 if num_customers <= 300 else (10*60 if num_customers <= 500 else 15*60))
+    epoch_tlim = 30
     init_routes, total_cost = construct_solution_from_ge_solver(problem, seed=exp_round, tmp_dir=f'tmp/tmp_{problem_name}_{exp_round}', time_limit=epoch_tlim)
     cur_routes = {}
     for i, route in enumerate(init_routes):

@@ -14,6 +14,7 @@ from gym.utils import seeding
 from sknetwork.embedding import Spectral
 import _pickle as cPickle
 import traceback
+from itertools import permutations
 
 import tools
 from cvrptw_utility import *
@@ -63,7 +64,7 @@ def compute_route_cost(routes, problem, sub_problem):
 
 class SubVRPTW_Environment(gym.Env):
     environment_name = "VRPTW Environment"
-    num_nodes_to_sample = 24
+    num_nodes_to_sample = 16
 
     def __init__(self, instance, data_dir, save_data=False, seed=1):
         self.rng = np.random.default_rng(seed)
@@ -93,7 +94,7 @@ class SubVRPTW_Environment(gym.Env):
         dir_name = os.path.dirname(f"{self.data_dir}/cvrp_benchmarks/homberger_{self.instance}_customer_instances/")
         if problem_file is None:
             problem_list = sorted(os.listdir(dir_name))
-            problem_file = self.rng.choice(problem_list)
+            problem_file = self.rng.choice(problem_list[:4])
         self.problem_name = str.lower(os.path.splitext(os.path.basename(problem_file))[0])
         self.problem_file = f"{dir_name}/{problem_file}"
         print("loading problem: ", self.problem_name, self.rd_seed)
@@ -122,19 +123,20 @@ class SubVRPTW_Environment(gym.Env):
                 routes, _ = construct_solution_from_ge_solver(self.problem, seed=self.rd_seed, tmp_dir=tmp_file_name, time_limit=240)
                 np.save(solution_file_name, np.array(routes))
         if ruin_nodes is None:
-            while True:
-                route_idx = self.rng.integers(len(routes))
-                node_idx = self.rng.integers(len(routes[route_idx]))
-                node = routes[route_idx][node_idx]
-                nb_customers = len(self.all_customers) - 1
-                dist_to_node = sorted([(c, duration_matrix[node][c]+duration_matrix[c][node]) for c in range(1, nb_customers+1)], key=lambda x: x[1])
-                ruin_nodes = [dist_to_node[i][0] for i in range(SubVRPTW_Environment.num_nodes_to_sample)]
-                self.sub_problem = get_sub_instance(ruin_nodes, routes, self.problem)
-                if 0 < len(self.sub_problem["ori_routes"]) <= max_num_route: break
+            # while True:
+            route_idx = self.rng.integers(len(routes))
+            node_idx = self.rng.integers(len(routes[route_idx]))
+            node = routes[route_idx][node_idx]
+            nb_customers = len(self.all_customers) - 1
+            dist_to_node = sorted([(c, duration_matrix[node][c]+duration_matrix[c][node]) for c in range(1, nb_customers+1)], key=lambda x: x[1])
+            ruin_nodes = [dist_to_node[i][0] for i in range(SubVRPTW_Environment.num_nodes_to_sample)]
+            self.sub_problem = get_sub_instance(ruin_nodes, routes, self.problem)
+            # if 0 < len(self.sub_problem["ori_routes"]) <= max_num_route: break
         else: self.sub_problem = get_sub_instance(ruin_nodes, routes, self.problem)
         self.sub_routes = [[] for _ in range(len(self.sub_problem["ori_routes"]))]
         self.order_to_dispatch = []
         for route in self.sub_problem["ori_routes"]: self.order_to_dispatch.extend(route)
+        self.order_to_dispatch = list(np.random.permutation(self.order_to_dispatch))
         # print("order to dispatch: ", self.order_to_dispatch)
         depots = self.sub_problem["ori_starts"] + self.sub_problem["ori_stops"]
         self.reward_norm = np.max([self.problem["duration_matrix"][c1, c2] for c1 in depots+self.order_to_dispatch for c2 in depots+self.order_to_dispatch])
