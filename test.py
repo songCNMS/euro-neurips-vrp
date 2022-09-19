@@ -14,12 +14,15 @@ if __name__ == "__main__":
     parser.add_argument("--instance", help="Instance to solve")
     args = parser.parse_args()
     instance = tools.read_vrplib(args.instance)
-    solutions = list(solve_static_vrptw(instance, time_limit=120, seed=7, tmp_dir="tmp"))
+    num_customers = len(instance["demands"])
+    # epoch_tlim = (5*60 if num_customers <= 300 else (10*60 if num_customers <= 500 else 15*60))
+    epoch_tlim = 30
+    solutions = list(solve_static_vrptw(instance, time_limit=epoch_tlim, seed=7, tmp_dir="tmp"))
     solution, total_cost = solutions[-1]
     
     start_time = time.time()
     ep = 0
-    while time.time() - start_time <= 14*3600:
+    while time.time() - start_time <= 5*3600:
         ep += 1
         route_idx = np.random.randint(len(solution))
         node_idx = np.random.randint(len(solution[route_idx]))

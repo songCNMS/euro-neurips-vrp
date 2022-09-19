@@ -908,6 +908,12 @@ def get_sub_instance(ruin_nodes, solution, instance):
         route = solution[route_idx]
         node_idxs = [n[0] for n in selected_nodes[route_idx]]
         start_idx, end_idx = np.min(node_idxs), np.max(node_idxs)+1
+        if end_idx - start_idx > max_num_nodes_per_route:
+            start_idx = start_idx + np.random.randint(end_idx - start_idx - max_num_nodes_per_route)
+            end_idx = start_idx + max_num_nodes_per_route
+        else:
+            end_idx = max(end_idx, start_idx + np.random.randint(max_num_nodes_per_route//2, max_num_nodes_per_route))
+            end_idx = min(end_idx, len(route))
         start_idxs.append(start_idx)
         end_idxs.append(end_idx)
         ori_routes.append(route[start_idx:end_idx])
